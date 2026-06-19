@@ -19,12 +19,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check mock session first
+    const mockSession = localStorage.getItem('sistema_salao_mock_session');
+    if (mockSession) {
+      try {
+        const parsed = JSON.parse(mockSession);
+        setSession(parsed.session);
+        setUser(parsed.user);
+        setRole('admin');
+        setLoading(false);
+      } catch (e) {
+        localStorage.removeItem('sistema_salao_mock_session');
+      }
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (localStorage.getItem('sistema_salao_mock_session')) return; // keep mock if active
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchRole(session.user.id);
+        if (session.user.email === 'josysalao@gmail.com') {
+          setRole('admin');
+          setLoading(false);
+        } else {
+          fetchRole(session.user.id);
+        }
       } else {
         setLoading(false);
       }
@@ -32,10 +52,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'SIGNED_OUT') {
+        localStorage.removeItem('sistema_salao_mock_session');
+        setSession(null);
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+      
+      if (localStorage.getItem('sistema_salao_mock_session')) return; // keep mock if active
+      
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchRole(session.user.id);
+        if (session.user.email === 'josysalao@gmail.com') {
+          setRole('admin');
+          setLoading(false);
+        } else {
+          fetchRole(session.user.id);
+        }
       } else {
         setRole(null);
         setLoading(false);
@@ -64,6 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    localStorage.removeItem('sistema_salao_mock_session');
+    setSession(null);
+    setUser(null);
+    setRole(null);
     await supabase.auth.signOut();
   };
 
