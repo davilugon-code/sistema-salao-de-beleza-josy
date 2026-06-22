@@ -55,6 +55,9 @@ export function AbaTokens() {
       setCreatedToken(rawToken);
       setIsTokenModalOpen(true);
       fetchTokens();
+    } else {
+      console.error('Erro ao criar token de API:', error);
+      alert(`Erro ao criar token de API: ${error.message}`);
     }
   };
 
