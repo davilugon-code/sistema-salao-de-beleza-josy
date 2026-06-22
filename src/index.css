@@ -47,3 +47,46 @@
     @apply font-heading font-medium;
   }
 }
+
+/* FullCalendar custom styling */
+.fc {
+  --fc-button-text-color: var(--text-main);
+  --fc-button-bg-color: var(--bg-card);
+  --fc-button-border-color: var(--border-card);
+  --fc-button-hover-bg-color: var(--primary-light);
+  --fc-button-hover-border-color: var(--primary);
+  --fc-button-active-bg-color: var(--primary-light);
+  --fc-button-active-border-color: var(--primary);
+  --fc-event-border-color: transparent;
+  --fc-page-bg-color: var(--bg-card);
+  --fc-neutral-bg-color: var(--bg-base);
+  --fc-border-color: var(--border-card);
+}
+
+.fc .fc-col-header-cell-cushion {
+  color: var(--text-main) !important;
+  font-family: var(--font-heading);
+  text-decoration: none !important;
+}
+
+.fc .fc-timegrid-slot-label-cushion, 
+.fc .fc-timegrid-axis-cushion {
+  color: var(--text-muted) !important;
+}
+
+.fc .fc-timegrid-slot {
+  background-color: var(--bg-card);
+}
+
+/* Force header cells and axis background in both modes to use the theme variables */
+.fc .fc-col-header-cell,
+.fc .fc-timegrid-axis,
+.fc .fc-timegrid-axis-frame,
+.fc-theme-standard .fc-scrollgrid th {
+  background-color: var(--bg-card) !important;
+}
+
+.fc .fc-theme-standard td, 
+.fc .fc-theme-standard th {
+  border-color: var(--border-card) !important;
+}

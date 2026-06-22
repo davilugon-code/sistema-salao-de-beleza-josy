@@ -12,6 +12,7 @@ import { Drawer } from '../components/ui/Drawer';
 import { LeadDetailsPanel } from '../components/ui/LeadDetailsPanel';
 import { ToastContainer, useToast } from '../components/ui/Toast';
 import { cn } from '../components/ui/Button';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Lead {
   id: string;
@@ -36,13 +37,13 @@ interface Lead {
 }
 
 const COLUMNS = [
-  { status: 'iniciou_atendimento', label: 'Iniciou o Atendimento', color: '#FAF0EE', headerColor: '#C47E7E' },
-  { status: 'conversando', label: 'Conversando', color: '#EFF6FF', headerColor: '#3B82F6' },
-  { status: 'agendado', label: 'Agendado', color: '#F0F7F3', headerColor: '#7A9E87' },
-  { status: 'compareceu', label: 'Compareceu', color: '#E6F0EA', headerColor: '#7A9E87' },
-  { status: 'cancelou_agendamento', label: 'Cancelou o Agendamento', color: '#FDF6EE', headerColor: '#E8A87C' },
-  { status: 'follow_up', label: 'Follow Up', color: '#FFF8F1', headerColor: '#E8804A' },
-  { status: 'abandonou_conversa', label: 'Abandonou a Conversa', color: '#F5F5F5', headerColor: '#9CA3AF' },
+  { status: 'iniciou_atendimento', label: 'Iniciou o Atendimento', color: '#FAF0EE', darkColor: '#3D2525', headerColor: '#C47E7E' },
+  { status: 'conversando', label: 'Conversando', color: '#EFF6FF', darkColor: '#1E293B', headerColor: '#3B82F6' },
+  { status: 'agendado', label: 'Agendado', color: '#F0F7F3', darkColor: '#14532D', headerColor: '#7A9E87' },
+  { status: 'compareceu', label: 'Compareceu', color: '#E6F0EA', darkColor: '#166534', headerColor: '#7A9E87' },
+  { status: 'cancelou_agendamento', label: 'Cancelou o Agendamento', color: '#FDF6EE', darkColor: '#432E24', headerColor: '#E8A87C' },
+  { status: 'follow_up', label: 'Follow Up', color: '#FFF8F1', darkColor: '#4C2417', headerColor: '#E8804A' },
+  { status: 'abandonou_conversa', label: 'Abandonou a Conversa', color: '#F5F5F5', darkColor: '#27272A', headerColor: '#9CA3AF' },
 ];
 
 const STATUS_LABELS: Record<string, string> = Object.fromEntries(COLUMNS.map((c) => [c.status, c.label]));
@@ -55,6 +56,7 @@ function formatRelativeMinutes(minutos: number | null) {
 }
 
 export function CRM() {
+  const { theme } = useTheme();
   const { toasts, addToast, removeToast } = useToast();
   const [columns, setColumns] = useState<Record<string, Lead[]>>({});
   const [loading, setLoading] = useState(true);
@@ -179,7 +181,7 @@ export function CRM() {
             const leads = columns[col.status] || [];
             return (
               <div key={col.status} className="flex flex-col rounded-card border border-border-card min-w-[220px] w-[220px] shrink-0 bg-card shadow-card">
-                <div className="p-3 rounded-t-card border-b border-border-card" style={{ backgroundColor: col.color }}>
+                <div className="p-3 rounded-t-card border-b border-border-card" style={{ backgroundColor: theme === 'dark' ? col.darkColor : col.color }}>
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm text-text-main">{col.label}</span>
                     <span className="text-xs font-semibold px-1.5 py-0.5 rounded-badge text-white" style={{ backgroundColor: col.headerColor }}>

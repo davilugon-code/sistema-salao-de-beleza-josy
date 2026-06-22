@@ -6,7 +6,7 @@ import { EventClickArg } from '@fullcalendar/core';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
@@ -187,7 +187,11 @@ export function Agenda() {
   const handleCreateAgenda = async () => {
     if (!newAgendaNome) return;
     const { error } = await supabase.from('agendas').insert({ nome: newAgendaNome, cor: newAgendaCor, ativo: true });
-    if (error) { addToast('Erro ao criar agenda.', 'error'); return; }
+    if (error) { 
+      console.error('Erro ao criar agenda no Supabase:', error);
+      addToast(`Erro ao criar agenda: ${error.message}`, 'error'); 
+      return; 
+    }
     addToast('Agenda criada com sucesso!');
     setNewAgendaModal(false);
     setNewAgendaNome('');
@@ -267,7 +271,22 @@ export function Agenda() {
         <Card key={agenda.id} className="overflow-hidden">
           <div className="h-1.5" style={{ backgroundColor: agenda.cor }} />
           <div className="flex items-center justify-between p-4 border-b border-border-card">
-            <h2 className="font-heading text-xl font-medium text-text-main">{agenda.nome}</h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="font-heading text-xl font-medium text-text-main">{agenda.nome}</h2>
+              <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 bg-base border border-border-card rounded text-text-muted">
+                <span>ID: {agenda.id}</span>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(agenda.id);
+                    addToast('ID da agenda copiado!');
+                  }}
+                  className="hover:text-primary transition-colors p-0.5"
+                  title="Copiar ID da Agenda"
+                >
+                  <Copy size={12} />
+                </button>
+              </div>
+            </div>
             {role === 'admin' && (
               <div className="flex gap-2">
                 <button onClick={() => openEditAgenda(agenda)} className="p-1.5 hover:bg-primary-light rounded text-text-muted hover:text-primary transition-colors">
