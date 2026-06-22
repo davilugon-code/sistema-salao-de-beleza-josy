@@ -72,6 +72,15 @@ export function Agenda() {
   const [newAgendaNome, setNewAgendaNome] = useState('');
   const [newAgendaCor, setNewAgendaCor] = useState(PRESET_COLORS[0]);
   const [editHours, setEditHours] = useState<Record<string, AgendaHourRow>>({});
+  const [newHours, setNewHours] = useState<Record<string, AgendaHourRow>>({
+    domingo: { dia: 'domingo', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
+    segunda: { dia: 'segunda', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+    terca: { dia: 'terca', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+    quarta: { dia: 'quarta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+    quinta: { dia: 'quinta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+    sexta: { dia: 'sexta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+    sabado: { dia: 'sabado', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
+  });
   const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '' });
   const [leadSuggestions, setLeadSuggestions] = useState<any[]>([]);
 
@@ -184,15 +193,40 @@ export function Agenda() {
     setViewAppModal(null);
   };
 
+  const openNewAgendaModal = () => {
+    setNewHours({
+      domingo: { dia: 'domingo', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
+      segunda: { dia: 'segunda', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+      terca: { dia: 'terca', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+      quarta: { dia: 'quarta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+      quinta: { dia: 'quinta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+      sexta: { dia: 'sexta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
+      sabado: { dia: 'sabado', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
+    });
+    setNewAgendaNome('');
+    setNewAgendaCor(PRESET_COLORS[0]);
+    setNewAgendaModal(true);
+  };
+
   const handleCreateAgenda = async () => {
     if (!newAgendaNome) return;
-    const { error } = await supabase.from('agendas').insert({ nome: newAgendaNome, cor: newAgendaCor, ativo: true });
+    const { data, error } = await supabase.from('agendas').insert({ nome: newAgendaNome, cor: newAgendaCor, ativo: true }).select().single();
     if (error) { 
       console.error('Erro ao criar agenda no Supabase:', error);
       addToast(`Erro ao criar agenda: ${error.message}`, 'error'); 
       return; 
     }
-    addToast('Agenda criada com sucesso!');
+    
+    // Insere os horários de funcionamento padrão configurados no modal de criação
+    const hoursToInsert = Object.values(newHours).map((h) => ({ ...h, agenda_id: data.id }));
+    const { error: hoursError } = await supabase.from('agenda_hours').insert(hoursToInsert);
+    if (hoursError) {
+      console.error('Erro ao salvar horários de funcionamento no Supabase:', hoursError);
+      addToast(`Agenda criada, mas erro ao salvar horários: ${hoursError.message}`, 'error');
+    } else {
+      addToast('Agenda criada com sucesso!');
+    }
+    
     setNewAgendaModal(false);
     setNewAgendaNome('');
     fetchAgendas();
@@ -253,7 +287,7 @@ export function Agenda() {
           </button>
         </div>
         {role === 'admin' && (
-          <Button onClick={() => setNewAgendaModal(true)}>
+          <Button onClick={openNewAgendaModal}>
             <Plus size={18} className="mr-1" /> Nova agenda
           </Button>
         )}
@@ -322,7 +356,7 @@ export function Agenda() {
       ))}
 
       {/* New Agenda Modal */}
-      <Modal isOpen={newAgendaModal} onClose={() => setNewAgendaModal(false)} title="Nova Agenda">
+      <Modal isOpen={newAgendaModal} onClose={() => setNewAgendaModal(false)} title="Nova Agenda" className="max-w-2xl">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Nome da agenda</label>
@@ -337,6 +371,26 @@ export function Agenda() {
                   style={{ backgroundColor: c, borderColor: newAgendaCor === c ? '#2D2020' : 'transparent' }}
                 />
               ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="font-medium text-text-main mb-3">Horários de Funcionamento</h3>
+            <div className="space-y-3">
+              {DIAS.map(({ key, label }) => {
+                const h = newHours[key] || { dia: key, aberto: false, hora_inicio: '08:00', hora_fim: '18:00' };
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="w-24 text-sm">{label}</span>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={h.aberto} onChange={(e) => setNewHours({ ...newHours, [key]: { ...h, aberto: e.target.checked } })} className="accent-primary" />
+                      <span className="text-sm">Aberto</span>
+                    </label>
+                    <Input type="time" value={h.hora_inicio || ''} disabled={!h.aberto} className="w-28" onChange={(e) => setNewHours({ ...newHours, [key]: { ...h, hora_inicio: e.target.value } })} />
+                    <span className="text-sm text-text-muted">até</span>
+                    <Input type="time" value={h.hora_fim || ''} disabled={!h.aberto} className="w-28" onChange={(e) => setNewHours({ ...newHours, [key]: { ...h, hora_fim: e.target.value } })} />
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="pt-4 flex justify-end gap-2">
