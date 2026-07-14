@@ -8,7 +8,7 @@ import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { calcularDuracaoProcedimento, adicionarMinutos, atualizarObservacoesComHorario } from '../lib/duracao';
+import { calcularDuracaoProcedimento, adicionarMinutos, atualizarObservacoesComHorario, obterHoraMinuto } from '../lib/duracao';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -67,6 +67,7 @@ export function Agenda() {
   const [newAppModal, setNewAppModal] = useState<{ agendaId: string; date: string; time: string; endTime: string } | null>(null);
   const [viewAppModal, setViewAppModal] = useState<any | null>(null);
   const [rescheduleModal, setRescheduleModal] = useState<{ id: string; date: string; time: string; endTime: string } | null>(null);
+  const endTimeManuallyEdited = useRef(false);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
 
   // Form states
@@ -181,6 +182,7 @@ export function Agenda() {
 
   const handleSlotClick = (agendaId: string) => (arg: DateClickArg) => {
     setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+    endTimeManuallyEdited.current = false;
     const dateStr = format(arg.date, 'yyyy-MM-dd');
     const timeStr = format(arg.date, 'HH:mm');
     const defaultEndTime = format(new Date(arg.date.getTime() + 60 * 60 * 1000), 'HH:mm');
@@ -642,11 +644,11 @@ export function Agenda() {
                 onChange={(e) => {
                   const proc = e.target.value;
                   setNewAppForm({ ...newAppForm, procedimento: proc });
-                  if (newAppModal) {
+                  if (newAppModal && !endTimeManuallyEdited.current) {
                     const dataHora = `${newAppModal.date}T${newAppModal.time}:00`;
                     const duracao = calcularDuracaoProcedimento(proc);
                     const dataHoraFim = adicionarMinutos(dataHora, duracao);
-                    const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
+                    const formattedEndTime = obterHoraMinuto(dataHoraFim);
                     
                     const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
                     const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
@@ -680,14 +682,18 @@ export function Agenda() {
                   value={newAppModal.time} 
                   onChange={(e) => {
                     const newTime = e.target.value;
-                    const dataHora = `${newAppModal.date}T${newTime}:00`;
-                    const duracao = calcularDuracaoProcedimento(newAppForm.procedimento);
-                    const dataHoraFim = adicionarMinutos(dataHora, duracao);
-                    const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
-                    
-                    const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newTime);
-                    const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
-                    setNewAppModal({ ...newAppModal, time: newTime, endTime: finalEndTime });
+                    if (!endTimeManuallyEdited.current) {
+                      const dataHora = `${newAppModal.date}T${newTime}:00`;
+                      const duracao = calcularDuracaoProcedimento(newAppForm.procedimento);
+                      const dataHoraFim = adicionarMinutos(dataHora, duracao);
+                      const formattedEndTime = obterHoraMinuto(dataHoraFim);
+                      
+                      const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newTime);
+                      const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
+                      setNewAppModal({ ...newAppModal, time: newTime, endTime: finalEndTime });
+                    } else {
+                      setNewAppModal({ ...newAppModal, time: newTime });
+                    }
                   }} 
                 />
               </div>
@@ -697,7 +703,8 @@ export function Agenda() {
                   type="time" 
                   value={newAppModal.endTime} 
                   onChange={(e) => {
-                    let val = e.target.value;
+                    const val = e.target.value;
+                    endTimeManuallyEdited.current = true;
                     const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
                     if (nextStart && val > nextStart) {
                       addToast(`Atenção: O próximo agendamento começa às ${nextStart}`, 'warning');
@@ -747,12 +754,13 @@ export function Agenda() {
                 onClick={() => {
                   const startStr = viewAppModal.data_hora_inicio;
                   const endStr = viewAppModal.data_hora_fim;
-                  const dateStr = format(new Date(startStr), 'yyyy-MM-dd');
-                  const timeStr = format(new Date(startStr), 'HH:mm');
+                  const dateStr = startStr.split('T')[0];
+                  const timeStr = obterHoraMinuto(startStr);
                   const calculatedEndTime = endStr 
-                    ? format(new Date(endStr), 'HH:mm') 
-                    : format(new Date(new Date(startStr).getTime() + 60 * 60 * 1000), 'HH:mm');
+                    ? obterHoraMinuto(endStr) 
+                    : obterHoraMinuto(adicionarMinutos(startStr, 60));
                   
+                  endTimeManuallyEdited.current = false;
                   const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, dateStr, timeStr, viewAppModal.id);
                   const finalEndTime = (nextStart && nextStart < calculatedEndTime) ? nextStart : calculatedEndTime;
                   
@@ -802,14 +810,18 @@ export function Agenda() {
                   value={rescheduleModal.time} 
                   onChange={(e) => {
                     const newTime = e.target.value;
-                    const dataHora = `${rescheduleModal.date}T${newTime}:00`;
-                    const duracao = calcularDuracaoProcedimento(viewAppModal.procedimento_nome);
-                    const dataHoraFim = adicionarMinutos(dataHora, duracao);
-                    const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
-                    
-                    const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, newTime, rescheduleModal.id);
-                    const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
-                    setRescheduleModal({ ...rescheduleModal, time: newTime, endTime: finalEndTime });
+                    if (!endTimeManuallyEdited.current) {
+                      const dataHora = `${rescheduleModal.date}T${newTime}:00`;
+                      const duracao = calcularDuracaoProcedimento(viewAppModal.procedimento_nome);
+                      const dataHoraFim = adicionarMinutos(dataHora, duracao);
+                      const formattedEndTime = obterHoraMinuto(dataHoraFim);
+                      
+                      const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, newTime, rescheduleModal.id);
+                      const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
+                      setRescheduleModal({ ...rescheduleModal, time: newTime, endTime: finalEndTime });
+                    } else {
+                      setRescheduleModal({ ...rescheduleModal, time: newTime });
+                    }
                   }} 
                 />
               </div>
@@ -819,7 +831,8 @@ export function Agenda() {
                   type="time" 
                   value={rescheduleModal.endTime} 
                   onChange={(e) => {
-                    let val = e.target.value;
+                    const val = e.target.value;
+                    endTimeManuallyEdited.current = true;
                     const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, rescheduleModal.time, rescheduleModal.id);
                     if (nextStart && val > nextStart) {
                       addToast(`Atenção: O próximo agendamento começa às ${nextStart}`, 'warning');
