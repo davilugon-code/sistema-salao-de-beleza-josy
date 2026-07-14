@@ -140,6 +140,32 @@ export function Agenda() {
     if (data) setAgendaHours((prev) => ({ ...prev, [agendaId]: data }));
   };
 
+  const getNextAppointmentStart = (agendaId: string, date: string, startTime: string, excludeId?: string): string | null => {
+    const agendaEvents = events[agendaId] || [];
+    const targetStartStr = `${date}T${startTime}:00`;
+    let nextStart: string | null = null;
+
+    agendaEvents.forEach((ev: any) => {
+      const startStr = ev.extendedProps?.data_hora_inicio;
+      if (!startStr) return;
+      if (excludeId && ev.extendedProps.id === excludeId) return;
+
+      if (startStr.startsWith(date)) {
+        if (startStr >= targetStartStr) {
+          if (!nextStart || startStr < nextStart) {
+            nextStart = startStr;
+          }
+        }
+      }
+    });
+
+    if (nextStart) {
+      const timePart = (nextStart as string).split('T')[1];
+      return timePart ? timePart.substring(0, 5) : null;
+    }
+    return null;
+  };
+
   const navigateWeek = (dir: 1 | -1) => {
     const next = dir === 1 ? addWeeks(currentDate, 1) : subWeeks(currentDate, 1);
     setCurrentDate(next);
@@ -155,12 +181,18 @@ export function Agenda() {
 
   const handleSlotClick = (agendaId: string) => (arg: DateClickArg) => {
     setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+    const dateStr = format(arg.date, 'yyyy-MM-dd');
+    const timeStr = format(arg.date, 'HH:mm');
     const defaultEndTime = format(new Date(arg.date.getTime() + 60 * 60 * 1000), 'HH:mm');
+    
+    const nextStart = getNextAppointmentStart(agendaId, dateStr, timeStr);
+    const finalEndTime = (nextStart && nextStart < defaultEndTime) ? nextStart : defaultEndTime;
+
     setNewAppModal({
       agendaId,
-      date: format(arg.date, 'yyyy-MM-dd'),
-      time: format(arg.date, 'HH:mm'),
-      endTime: defaultEndTime,
+      date: dateStr,
+      time: timeStr,
+      endTime: finalEndTime,
     });
   };
 
@@ -586,7 +618,10 @@ export function Agenda() {
                     const duracao = calcularDuracaoProcedimento(proc);
                     const dataHoraFim = adicionarMinutos(dataHora, duracao);
                     const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
-                    setNewAppModal({ ...newAppModal, endTime: formattedEndTime });
+                    
+                    const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
+                    const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
+                    setNewAppModal({ ...newAppModal, endTime: finalEndTime });
                   }
                 }} 
                 placeholder="Ex: Limpeza de pele" 
@@ -595,7 +630,19 @@ export function Agenda() {
             <div className="flex gap-3">
               <div className="flex-2">
                 <label className="block text-sm font-medium mb-1">Data</label>
-                <Input type="date" value={newAppModal.date} onChange={(e) => setNewAppModal({ ...newAppModal, date: e.target.value })} />
+                <Input 
+                  type="date" 
+                  value={newAppModal.date} 
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    const nextStart = getNextAppointmentStart(newAppModal.agendaId, newDate, newAppModal.time);
+                    let finalEndTime = newAppModal.endTime;
+                    if (nextStart && nextStart < newAppModal.endTime) {
+                      finalEndTime = nextStart;
+                    }
+                    setNewAppModal({ ...newAppModal, date: newDate, endTime: finalEndTime });
+                  }} 
+                />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Início</label>
@@ -608,13 +655,28 @@ export function Agenda() {
                     const duracao = calcularDuracaoProcedimento(newAppForm.procedimento);
                     const dataHoraFim = adicionarMinutos(dataHora, duracao);
                     const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
-                    setNewAppModal({ ...newAppModal, time: newTime, endTime: formattedEndTime });
+                    
+                    const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newTime);
+                    const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
+                    setNewAppModal({ ...newAppModal, time: newTime, endTime: finalEndTime });
                   }} 
                 />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Fim</label>
-                <Input type="time" value={newAppModal.endTime} onChange={(e) => setNewAppModal({ ...newAppModal, endTime: e.target.value })} />
+                <Input 
+                  type="time" 
+                  value={newAppModal.endTime} 
+                  onChange={(e) => {
+                    let val = e.target.value;
+                    const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
+                    if (nextStart && val > nextStart) {
+                      val = nextStart;
+                      addToast(`Horário limite é o início do próximo agendamento às ${nextStart}`, 'warning');
+                    }
+                    setNewAppModal({ ...newAppModal, endTime: val });
+                  }} 
+                />
               </div>
             </div>
             <div>
@@ -657,14 +719,20 @@ export function Agenda() {
                 onClick={() => {
                   const startStr = viewAppModal.data_hora_inicio;
                   const endStr = viewAppModal.data_hora_fim;
-                  const defaultEndTime = endStr 
+                  const dateStr = format(new Date(startStr), 'yyyy-MM-dd');
+                  const timeStr = format(new Date(startStr), 'HH:mm');
+                  const calculatedEndTime = endStr 
                     ? format(new Date(endStr), 'HH:mm') 
                     : format(new Date(new Date(startStr).getTime() + 60 * 60 * 1000), 'HH:mm');
+                  
+                  const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, dateStr, timeStr, viewAppModal.id);
+                  const finalEndTime = (nextStart && nextStart < calculatedEndTime) ? nextStart : calculatedEndTime;
+                  
                   setRescheduleModal({
                     id: viewAppModal.id,
-                    date: format(new Date(startStr), 'yyyy-MM-dd'),
-                    time: format(new Date(startStr), 'HH:mm'),
-                    endTime: defaultEndTime,
+                    date: dateStr,
+                    time: timeStr,
+                    endTime: finalEndTime,
                   });
                 }}
               >
@@ -685,7 +753,19 @@ export function Agenda() {
             <div className="flex gap-3">
               <div className="flex-2">
                 <label className="block text-sm font-medium mb-1">Nova data</label>
-                <Input type="date" value={rescheduleModal.date} onChange={(e) => setRescheduleModal({ ...rescheduleModal, date: e.target.value })} />
+                <Input 
+                  type="date" 
+                  value={rescheduleModal.date} 
+                  onChange={(e) => {
+                    const newDate = e.target.value;
+                    const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, newDate, rescheduleModal.time, rescheduleModal.id);
+                    let finalEndTime = rescheduleModal.endTime;
+                    if (nextStart && nextStart < rescheduleModal.endTime) {
+                      finalEndTime = nextStart;
+                    }
+                    setRescheduleModal({ ...rescheduleModal, date: newDate, endTime: finalEndTime });
+                  }} 
+                />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Início</label>
@@ -698,13 +778,28 @@ export function Agenda() {
                     const duracao = calcularDuracaoProcedimento(viewAppModal.procedimento_nome);
                     const dataHoraFim = adicionarMinutos(dataHora, duracao);
                     const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
-                    setRescheduleModal({ ...rescheduleModal, time: newTime, endTime: formattedEndTime });
+                    
+                    const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, newTime, rescheduleModal.id);
+                    const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
+                    setRescheduleModal({ ...rescheduleModal, time: newTime, endTime: finalEndTime });
                   }} 
                 />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Fim</label>
-                <Input type="time" value={rescheduleModal.endTime} onChange={(e) => setRescheduleModal({ ...rescheduleModal, endTime: e.target.value })} />
+                <Input 
+                  type="time" 
+                  value={rescheduleModal.endTime} 
+                  onChange={(e) => {
+                    let val = e.target.value;
+                    const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, rescheduleModal.time, rescheduleModal.id);
+                    if (nextStart && val > nextStart) {
+                      val = nextStart;
+                      addToast(`Horário limite é o início do próximo agendamento às ${nextStart}`, 'warning');
+                    }
+                    setRescheduleModal({ ...rescheduleModal, endTime: val });
+                  }} 
+                />
               </div>
             </div>
             <div className="pt-4 flex justify-end gap-2">
