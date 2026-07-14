@@ -217,9 +217,31 @@ export function Agenda() {
     const parts = (newAppForm.procedimento || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
     const updatedObs = atualizarObservacoesComHorario(newAppForm.obs, dataHora, dataHoraFim, parts.length);
 
+    let targetLeadId = newAppForm.leadId;
+
+    if (!targetLeadId && !newAppForm.clienteId) {
+      const { data: createdLead, error: createLeadErr } = await supabase
+        .from('leads_estetica')
+        .insert({
+          nome_lead: newAppForm.nome || newAppForm.leadSearch || 'Lead Manual',
+          whatsapp_lead: newAppForm.whatsapp || null,
+          status: 'agendado',
+        })
+        .select()
+        .single();
+
+      if (createLeadErr) {
+        console.error('Erro ao criar lead automático:', createLeadErr);
+        addToast(`Erro ao criar lead: ${createLeadErr.message}`, 'error');
+        return;
+      }
+      targetLeadId = createdLead.id;
+    }
+
     const { error } = await supabase.from('agendamentos_estetica').insert({
       agenda_id: newAppModal.agendaId,
-      lead_id: newAppForm.leadId || null,
+      lead_id: targetLeadId || null,
+      cliente_id: newAppForm.clienteId || null,
       nome_lead: newAppForm.nome || newAppForm.leadSearch,
       whatsapp_lead: newAppForm.whatsapp || null,
       procedimento_nome: newAppForm.procedimento,
@@ -234,9 +256,7 @@ export function Agenda() {
       return; 
     }
 
-    // Atualiza o status do lead correspondente para 'agendado' e define data_agendamento
-    let targetLeadId = newAppForm.leadId;
-    if (!targetLeadId && newAppForm.clienteId) {
+    if (!newAppForm.leadId && newAppForm.clienteId) {
       const { data: clientData } = await supabase
         .from('clientes_estetica')
         .select('lead_id')
