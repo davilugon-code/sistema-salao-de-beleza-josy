@@ -218,13 +218,14 @@ export function Agenda() {
     const updatedObs = atualizarObservacoesComHorario(newAppForm.obs, dataHora, dataHoraFim, parts.length);
 
     let targetLeadId = newAppForm.leadId;
+    const generatedWhatsapp = newAppForm.whatsapp || `sem-whatsapp-${Date.now()}`;
 
     if (!targetLeadId && !newAppForm.clienteId) {
       const { data: createdLead, error: createLeadErr } = await supabase
         .from('leads_estetica')
         .insert({
           nome_lead: newAppForm.nome || newAppForm.leadSearch || 'Lead Manual',
-          whatsapp_lead: newAppForm.whatsapp || null,
+          whatsapp_lead: generatedWhatsapp,
           status: 'agendado',
         })
         .select()
