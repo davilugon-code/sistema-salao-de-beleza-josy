@@ -8,6 +8,7 @@ import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { calcularDuracaoProcedimento, adicionarMinutos, atualizarObservacoesComHorario } from '../lib/duracao';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -63,9 +64,9 @@ export function Agenda() {
   const [newAgendaModal, setNewAgendaModal] = useState(false);
   const [editAgendaModal, setEditAgendaModal] = useState<Agenda | null>(null);
   const [deleteAgendaModal, setDeleteAgendaModal] = useState<Agenda | null>(null);
-  const [newAppModal, setNewAppModal] = useState<{ agendaId: string; date: string; time: string } | null>(null);
+  const [newAppModal, setNewAppModal] = useState<{ agendaId: string; date: string; time: string; endTime: string } | null>(null);
   const [viewAppModal, setViewAppModal] = useState<any | null>(null);
-  const [rescheduleModal, setRescheduleModal] = useState<{ id: string; date: string; time: string } | null>(null);
+  const [rescheduleModal, setRescheduleModal] = useState<{ id: string; date: string; time: string; endTime: string } | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
 
   // Form states
@@ -81,10 +82,35 @@ export function Agenda() {
     sexta: { dia: 'sexta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
     sabado: { dia: 'sabado', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
   });
-  const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '' });
+  const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
   const [leadSuggestions, setLeadSuggestions] = useState<any[]>([]);
 
-  useEffect(() => { fetchAgendas(); }, []);
+  useEffect(() => {
+    fetchAgendas();
+
+    // Inscreve no canal Realtime para escutar atualizações na tabela agendamentos_estetica
+    const channel = supabase
+      .channel('agendamentos_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agendamentos_estetica' },
+        (payload: any) => {
+          // Recarrega os eventos da agenda afetada
+          const agendaId = payload.new?.agenda_id || payload.old?.agenda_id;
+          if (agendaId) {
+            fetchEvents(agendaId);
+          } else {
+            // Fallback se não detectar agenda_id: recarrega todas
+            fetchAgendas();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const fetchAgendas = async () => {
     const { data } = await supabase.from('agendas').select('*').eq('ativo', true).order('created_at');
@@ -96,12 +122,12 @@ export function Agenda() {
 
   const fetchEvents = async (agendaId: string) => {
     const { data } = await supabase.from('agendamentos_estetica')
-      .select('id, nome_lead, procedimento_nome, data_hora_inicio, data_hora_fim, status, observacoes, lead_id, cliente_id, agenda_id')
+      .select('id, nome_lead, whatsapp_lead, procedimento_nome, data_hora_inicio, data_hora_fim, status, observacoes, lead_id, cliente_id, agenda_id')
       .eq('agenda_id', agendaId)
       .neq('status', 'cancelado');
     if (data) {
       const mapped = data.map((e) => ({
-        id: e.id, title: `${e.nome_lead || 'Lead'} — ${e.procedimento_nome || ''}`,
+        id: e.id, title: `${e.nome_lead || e.whatsapp_lead || 'Lead'} — ${e.procedimento_nome || ''}`,
         start: e.data_hora_inicio, end: e.data_hora_fim,
         extendedProps: { ...e },
       }));
@@ -128,11 +154,13 @@ export function Agenda() {
   const weekLabel = `${format(startOfWeek(currentDate, { locale: ptBR }), 'dd/MM')} - ${format(endOfWeek(currentDate, { locale: ptBR }), 'dd/MM/yyyy')}`;
 
   const handleSlotClick = (agendaId: string) => (arg: DateClickArg) => {
-    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '' });
+    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+    const defaultEndTime = format(new Date(arg.date.getTime() + 60 * 60 * 1000), 'HH:mm');
     setNewAppModal({
       agendaId,
       date: format(arg.date, 'yyyy-MM-dd'),
       time: format(arg.date, 'HH:mm'),
+      endTime: defaultEndTime,
     });
   };
 
@@ -153,16 +181,42 @@ export function Agenda() {
   const handleCreateAppointment = async () => {
     if (!newAppModal) return;
     const dataHora = `${newAppModal.date}T${newAppModal.time}:00`;
+    const dataHoraFim = `${newAppModal.date}T${newAppModal.endTime}:00`;
+    const parts = (newAppForm.procedimento || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
+    const updatedObs = atualizarObservacoesComHorario(newAppForm.obs, dataHora, dataHoraFim, parts.length);
+
     const { error } = await supabase.from('agendamentos_estetica').insert({
       agenda_id: newAppModal.agendaId,
       lead_id: newAppForm.leadId || null,
       nome_lead: newAppForm.nome || newAppForm.leadSearch,
+      whatsapp_lead: newAppForm.whatsapp || null,
       procedimento_nome: newAppForm.procedimento,
-      observacoes: newAppForm.obs,
+      observacoes: updatedObs,
       data_hora_inicio: dataHora,
+      data_hora_fim: dataHoraFim,
       status: 'agendado',
     });
     if (error) { addToast('Erro ao criar agendamento.', 'error'); return; }
+
+    // Atualiza o status do lead correspondente para 'agendado' e define data_agendamento
+    let targetLeadId = newAppForm.leadId;
+    if (!targetLeadId && newAppForm.clienteId) {
+      const { data: clientData } = await supabase
+        .from('clientes_estetica')
+        .select('lead_id')
+        .eq('id', newAppForm.clienteId)
+        .single();
+      if (clientData?.lead_id) {
+        targetLeadId = clientData.lead_id;
+      }
+    }
+    if (targetLeadId) {
+      await supabase
+        .from('leads_estetica')
+        .update({ status: 'agendado', data_agendamento: dataHora })
+        .eq('id', targetLeadId);
+    }
+
     addToast('Agendamento criado com sucesso!');
     setNewAppModal(null);
     fetchEvents(newAppModal.agendaId);
@@ -177,15 +231,51 @@ export function Agenda() {
   };
 
   const handleCancelAppointment = async (id: string, agendaId: string) => {
-    await handleUpdateStatus(id, agendaId, 'cancelado');
-    setViewAppModal(null);
-    setCancelConfirm(null);
+    const app = viewAppModal;
+    if (app) {
+      // Exclui fisicamente o agendamento
+      const { error } = await supabase.from('agendamentos_estetica').delete().eq('id', id);
+      if (error) { addToast('Erro ao remover agendamento.', 'error'); return; }
+
+      // Atualiza o status do lead correspondente para 'cancelou_agendamento'
+      let targetLeadId = app.lead_id;
+      if (!targetLeadId && app.cliente_id) {
+        const { data: clientData } = await supabase
+          .from('clientes_estetica')
+          .select('lead_id')
+          .eq('id', app.cliente_id)
+          .single();
+        if (clientData?.lead_id) {
+          targetLeadId = clientData.lead_id;
+        }
+      }
+      if (targetLeadId) {
+        await supabase
+          .from('leads_estetica')
+          .update({ status: 'cancelou_agendamento', data_agendamento: null })
+          .eq('id', targetLeadId);
+      }
+
+      addToast('Agendamento cancelado com sucesso!');
+      setViewAppModal(null);
+      setCancelConfirm(null);
+      fetchEvents(agendaId);
+    }
   };
 
   const handleReschedule = async () => {
     if (!rescheduleModal || !viewAppModal) return;
     const dataHora = `${rescheduleModal.date}T${rescheduleModal.time}:00`;
-    const { error } = await supabase.from('agendamentos_estetica').update({ data_hora_inicio: dataHora, status: 'agendado' }).eq('id', rescheduleModal.id);
+    const dataHoraFim = `${rescheduleModal.date}T${rescheduleModal.endTime}:00`;
+    const parts = (viewAppModal.procedimento_nome || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
+    const updatedObs = atualizarObservacoesComHorario(viewAppModal.observacoes, dataHora, dataHoraFim, parts.length);
+
+    const { error } = await supabase.from('agendamentos_estetica').update({
+      data_hora_inicio: dataHora,
+      data_hora_fim: dataHoraFim,
+      observacoes: updatedObs,
+      status: 'agendado'
+    }).eq('id', rescheduleModal.id);
     if (error) { addToast('Erro ao reagendar.', 'error'); return; }
     addToast('Reagendado com sucesso!');
     setRescheduleModal(null);
@@ -339,6 +429,7 @@ export function Agenda() {
               initialView="timeGridWeek"
               locale={ptBrLocale}
               headerToolbar={false}
+              timeZone="local"
               slotMinTime="06:00:00"
               slotMaxTime="22:00:00"
               slotDuration="00:60:00"
@@ -474,7 +565,7 @@ export function Agenda() {
                 <div className="absolute z-10 w-full mt-1 bg-card border border-border-card rounded-input shadow-dropdown">
                   {leadSuggestions.map((s) => (
                     <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-primary-light text-sm" onClick={() => {
-                      setNewAppForm({ ...newAppForm, leadSearch: s.nome || s.whatsapp, nome: s.nome || '', leadId: s.tipo === 'lead' ? s.id : '', clienteId: s.tipo === 'cliente' ? s.id : '' });
+                      setNewAppForm({ ...newAppForm, leadSearch: s.nome || s.whatsapp, nome: s.nome || '', leadId: s.tipo === 'lead' ? s.id : '', clienteId: s.tipo === 'cliente' ? s.id : '', whatsapp: s.whatsapp || '' });
                       setLeadSuggestions([]);
                     }}>
                       <span className="font-medium">{s.nome || 'Sem nome'}</span> — {s.whatsapp}
@@ -485,16 +576,45 @@ export function Agenda() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Procedimento</label>
-              <Input value={newAppForm.procedimento} onChange={(e) => setNewAppForm({ ...newAppForm, procedimento: e.target.value })} placeholder="Ex: Limpeza de pele" />
+              <Input 
+                value={newAppForm.procedimento} 
+                onChange={(e) => {
+                  const proc = e.target.value;
+                  setNewAppForm({ ...newAppForm, procedimento: proc });
+                  if (newAppModal) {
+                    const dataHora = `${newAppModal.date}T${newAppModal.time}:00`;
+                    const duracao = calcularDuracaoProcedimento(proc);
+                    const dataHoraFim = adicionarMinutos(dataHora, duracao);
+                    const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
+                    setNewAppModal({ ...newAppModal, endTime: formattedEndTime });
+                  }
+                }} 
+                placeholder="Ex: Limpeza de pele" 
+              />
             </div>
             <div className="flex gap-3">
-              <div className="flex-1">
+              <div className="flex-2">
                 <label className="block text-sm font-medium mb-1">Data</label>
                 <Input type="date" value={newAppModal.date} onChange={(e) => setNewAppModal({ ...newAppModal, date: e.target.value })} />
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium mb-1">Hora</label>
-                <Input type="time" value={newAppModal.time} onChange={(e) => setNewAppModal({ ...newAppModal, time: e.target.value })} />
+                <label className="block text-sm font-medium mb-1">Início</label>
+                <Input 
+                  type="time" 
+                  value={newAppModal.time} 
+                  onChange={(e) => {
+                    const newTime = e.target.value;
+                    const dataHora = `${newAppModal.date}T${newTime}:00`;
+                    const duracao = calcularDuracaoProcedimento(newAppForm.procedimento);
+                    const dataHoraFim = adicionarMinutos(dataHora, duracao);
+                    const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
+                    setNewAppModal({ ...newAppModal, time: newTime, endTime: formattedEndTime });
+                  }} 
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1">Fim</label>
+                <Input type="time" value={newAppModal.endTime} onChange={(e) => setNewAppModal({ ...newAppModal, endTime: e.target.value })} />
               </div>
             </div>
             <div>
@@ -515,7 +635,7 @@ export function Agenda() {
         {viewAppModal && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-text-muted">Nome</span><p className="font-medium">{viewAppModal.nome_lead || '—'}</p></div>
+              <div><span className="text-text-muted">Nome</span><p className="font-medium">{viewAppModal.nome_lead || viewAppModal.whatsapp_lead || '—'}</p></div>
               <div><span className="text-text-muted">Procedimento</span><p className="font-medium">{viewAppModal.procedimento_nome || '—'}</p></div>
               <div><span className="text-text-muted">Início</span><p className="font-medium">{viewAppModal.data_hora_inicio ? format(new Date(viewAppModal.data_hora_inicio), 'dd/MM/yyyy HH:mm') : '—'}</p></div>
               <div><span className="text-text-muted">Fim</span><p className="font-medium">{viewAppModal.data_hora_fim ? format(new Date(viewAppModal.data_hora_fim), 'HH:mm') : '—'}</p></div>
@@ -531,7 +651,23 @@ export function Agenda() {
               </select>
             </div>
             <div className="flex gap-2 pt-2">
-              <Button variant="secondary" className="flex-1" onClick={() => setRescheduleModal({ id: viewAppModal.id, date: format(new Date(viewAppModal.data_hora_inicio), 'yyyy-MM-dd'), time: format(new Date(viewAppModal.data_hora_inicio), 'HH:mm') })}>
+              <Button 
+                variant="secondary" 
+                className="flex-1" 
+                onClick={() => {
+                  const startStr = viewAppModal.data_hora_inicio;
+                  const endStr = viewAppModal.data_hora_fim;
+                  const defaultEndTime = endStr 
+                    ? format(new Date(endStr), 'HH:mm') 
+                    : format(new Date(new Date(startStr).getTime() + 60 * 60 * 1000), 'HH:mm');
+                  setRescheduleModal({
+                    id: viewAppModal.id,
+                    date: format(new Date(startStr), 'yyyy-MM-dd'),
+                    time: format(new Date(startStr), 'HH:mm'),
+                    endTime: defaultEndTime,
+                  });
+                }}
+              >
                 Reagendar
               </Button>
               <Button variant="danger" className="flex-1" onClick={() => setCancelConfirm(viewAppModal.id)}>
@@ -543,17 +679,32 @@ export function Agenda() {
       </Modal>
 
       {/* Reschedule Modal */}
-      <Modal isOpen={!!rescheduleModal} onClose={() => setRescheduleModal(null)} title="Reagendar">
+      <Modal isOpen={!!rescheduleModal} onClose={() => setRescheduleModal(null)} title="Reagendar/Editar Horário">
         {rescheduleModal && (
           <div className="space-y-4">
             <div className="flex gap-3">
-              <div className="flex-1">
+              <div className="flex-2">
                 <label className="block text-sm font-medium mb-1">Nova data</label>
                 <Input type="date" value={rescheduleModal.date} onChange={(e) => setRescheduleModal({ ...rescheduleModal, date: e.target.value })} />
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium mb-1">Novo horário</label>
-                <Input type="time" value={rescheduleModal.time} onChange={(e) => setRescheduleModal({ ...rescheduleModal, time: e.target.value })} />
+                <label className="block text-sm font-medium mb-1">Início</label>
+                <Input 
+                  type="time" 
+                  value={rescheduleModal.time} 
+                  onChange={(e) => {
+                    const newTime = e.target.value;
+                    const dataHora = `${rescheduleModal.date}T${newTime}:00`;
+                    const duracao = calcularDuracaoProcedimento(viewAppModal.procedimento_nome);
+                    const dataHoraFim = adicionarMinutos(dataHora, duracao);
+                    const formattedEndTime = format(new Date(dataHoraFim), 'HH:mm');
+                    setRescheduleModal({ ...rescheduleModal, time: newTime, endTime: formattedEndTime });
+                  }} 
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-1">Fim</label>
+                <Input type="time" value={rescheduleModal.endTime} onChange={(e) => setRescheduleModal({ ...rescheduleModal, endTime: e.target.value })} />
               </div>
             </div>
             <div className="pt-4 flex justify-end gap-2">
