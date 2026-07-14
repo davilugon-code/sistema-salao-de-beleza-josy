@@ -228,7 +228,11 @@ export function Agenda() {
       data_hora_fim: dataHoraFim,
       status: 'agendado',
     });
-    if (error) { addToast('Erro ao criar agendamento.', 'error'); return; }
+    if (error) { 
+      console.error('Erro ao criar agendamento no Supabase:', error);
+      addToast(`Erro ao criar agendamento: ${error.message}`, 'error'); 
+      return; 
+    }
 
     // Atualiza o status do lead correspondente para 'agendado' e define data_agendamento
     let targetLeadId = newAppForm.leadId;
@@ -308,7 +312,11 @@ export function Agenda() {
       observacoes: updatedObs,
       status: 'agendado'
     }).eq('id', rescheduleModal.id);
-    if (error) { addToast('Erro ao reagendar.', 'error'); return; }
+    if (error) { 
+      console.error('Erro ao reagendar no Supabase:', error);
+      addToast(`Erro ao reagendar: ${error.message}`, 'error'); 
+      return; 
+    }
     addToast('Reagendado com sucesso!');
     setRescheduleModal(null);
     fetchEvents(viewAppModal.agenda_id);
