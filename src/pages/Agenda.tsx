@@ -151,7 +151,7 @@ export function Agenda() {
       if (excludeId && ev.extendedProps.id === excludeId) return;
 
       if (startStr.startsWith(date)) {
-        if (startStr >= targetStartStr) {
+        if (startStr > targetStartStr) {
           if (!nextStart || startStr < nextStart) {
             nextStart = startStr;
           }
@@ -700,8 +700,7 @@ export function Agenda() {
                     let val = e.target.value;
                     const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
                     if (nextStart && val > nextStart) {
-                      val = nextStart;
-                      addToast(`Horário limite é o início do próximo agendamento às ${nextStart}`, 'warning');
+                      addToast(`Atenção: O próximo agendamento começa às ${nextStart}`, 'warning');
                     }
                     setNewAppModal({ ...newAppModal, endTime: val });
                   }} 
@@ -823,8 +822,7 @@ export function Agenda() {
                     let val = e.target.value;
                     const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, rescheduleModal.time, rescheduleModal.id);
                     if (nextStart && val > nextStart) {
-                      val = nextStart;
-                      addToast(`Horário limite é o início do próximo agendamento às ${nextStart}`, 'warning');
+                      addToast(`Atenção: O próximo agendamento começa às ${nextStart}`, 'warning');
                     }
                     setRescheduleModal({ ...rescheduleModal, endTime: val });
                   }} 
