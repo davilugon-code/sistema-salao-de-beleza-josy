@@ -496,6 +496,7 @@ export function Agenda() {
               slotMinTime="06:00:00"
               slotMaxTime="22:00:00"
               slotDuration="00:60:00"
+              snapDuration="00:05:00"
               allDaySlot={false}
               height="auto"
               events={events[agenda.id] || []}
