@@ -227,7 +227,7 @@ export function LeadsClientes() {
                       onClick={() => setDrawerItem({ lead })}
                       className="border-b border-border-card hover:bg-primary-light/30 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 font-medium text-text-main">{lead.nome_lead || 'Sem nome'}</td>
+                      <td className="px-4 py-3 font-medium text-text-main">{lead.nome_lead || lead.whatsapp_lead || 'Sem nome'}</td>
                       <td className="px-4 py-3 text-text-muted">{lead.whatsapp_lead}</td>
                       <td className="px-4 py-3 text-text-muted max-w-[120px] truncate">{lead.procedimento_interesse || '—'}</td>
                       <td className="px-4 py-3">
@@ -276,7 +276,7 @@ export function LeadsClientes() {
                         })}
                         className="border-b border-border-card hover:bg-primary-light/30 cursor-pointer transition-colors"
                       >
-                        <td className="px-4 py-3 font-medium text-text-main">{lead?.nome_lead || 'Sem nome'}</td>
+                        <td className="px-4 py-3 font-medium text-text-main">{lead?.nome_lead || lead?.whatsapp_lead || 'Sem nome'}</td>
                         <td className="px-4 py-3 text-text-muted">{lead?.whatsapp_lead}</td>
                         <td className="px-4 py-3 text-text-muted">—</td>
                         <td className="px-4 py-3 text-text-muted">—</td>

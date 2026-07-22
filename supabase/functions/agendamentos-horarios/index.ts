@@ -1,9 +1,8 @@
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { handleCors, createResponse, handleError } from '../_shared/errors.ts';
 import { authenticateRequest, validateAgenda } from '../_shared/auth.ts';
 import { calcularSlotsDisponiveis } from '../_shared/slots.ts';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
 
@@ -31,38 +30,59 @@ serve(async (req) => {
     if (!dateRegex.test(data)) {
       return createResponse(false, 'FORMATO_INVALIDO', 'Formato de data ou hora inválido.', 422);
     }
-    
+
     if (hora) {
-       const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-       if (!timeRegex.test(hora)) {
-         return createResponse(false, 'FORMATO_INVALIDO', 'Formato de data ou hora inválido.', 422);
-       }
+      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+      if (!timeRegex.test(hora)) {
+        return createResponse(false, 'FORMATO_INVALIDO', 'Formato de data ou hora inválido.', 422);
+      }
     }
 
     const slotsResult = await calcularSlotsDisponiveis(supabase, agenda_id, data);
     if (slotsResult.errorResponse) return slotsResult.errorResponse;
 
-    const slots = slotsResult.slots;
+    const slots = slotsResult.slots ?? [];
+    const diaSemana = slotsResult.diaSemana ?? '';
+    const duracaoMinutos = slotsResult.duracaoMinutos ?? 100;
+
+    const parts = data.split('-');
+    const dataBr = `${parts[2]}/${parts[1]}/${parts[0]}`;
 
     if (hora) {
       if (slots.includes(hora)) {
-         return createResponse(true, 'HORARIO_DISPONIVEL', 'O horário solicitado está disponível.', 200, { horario: `${data}T${hora}:00-03:00` });
+        return createResponse(true, 'HORARIO_DISPONIVEL', 'O horário solicitado está disponível.', 200, {
+          horario: `${data}T${hora}:00`,
+          dia_semana: diaSemana,
+        });
       } else {
-         const validFutureSlots = slots.filter((s: string) => s > hora);
-         const sugestoes = validFutureSlots.slice(0, 3).map((s: string) => `${data}T${s}:00-03:00`);
-         if (sugestoes.length === 0) {
-            const fallback = slots.slice(0, 3).map((s: string) => `${data}T${s}:00-03:00`);
-            return createResponse(false, 'HORARIO_OCUPADO', 'O horário solicitado não está disponível. Aqui estão os próximos horários livres:', 200, { sugestoes: fallback });
-         }
-         return createResponse(false, 'HORARIO_OCUPADO', 'O horário solicitado não está disponível. Aqui estão os próximos horários livres:', 200, { sugestoes });
+        const validFutureSlots = slots.filter((s: string) => s > hora);
+        const sugestoes = validFutureSlots.slice(0, 3).map((s: string) => `${data}T${s}:00`);
+        if (sugestoes.length === 0) {
+          const fallback = slots.slice(0, 3).map((s: string) => `${data}T${s}:00`);
+          return createResponse(false, 'HORARIO_OCUPADO', 'O horário solicitado não está disponível. Aqui estão os próximos horários livres:', 200, {
+            sugestoes: fallback,
+            dia_semana: diaSemana,
+          });
+        }
+        return createResponse(false, 'HORARIO_OCUPADO', 'O horário solicitado não está disponível. Aqui estão os próximos horários livres:', 200, {
+          sugestoes,
+          dia_semana: diaSemana,
+        });
       }
     } else {
-      const parts = data.split('-');
-      const dataBr = `${parts[2]}/${parts[1]}/${parts[0]}`;
       if (slots.length > 0) {
-        return createResponse(true, 'HORARIOS_DISPONIVEIS', `Horários disponíveis para o dia ${dataBr}.`, 200, { data, duracao_minutos: 60, slots_disponiveis: slots });
+        return createResponse(true, 'HORARIOS_DISPONIVEIS', `Horários disponíveis para ${diaSemana}, dia ${dataBr}.`, 200, {
+          data,
+          dia_semana: diaSemana,
+          duracao_minutos: duracaoMinutos,
+          slots_disponiveis: slots,
+        });
       } else {
-        return createResponse(true, 'HORARIOS_DISPONIVEIS', 'Não há horários disponíveis para o dia solicitado.', 200, { data, slots_disponiveis: [] });
+        return createResponse(true, 'HORARIOS_DISPONIVEIS', `Não há horários disponíveis para ${diaSemana}, dia ${dataBr}.`, 200, {
+          data,
+          dia_semana: diaSemana,
+          slots_disponiveis: [],
+        });
       }
     }
 

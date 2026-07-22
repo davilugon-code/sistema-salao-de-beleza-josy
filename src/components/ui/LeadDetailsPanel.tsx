@@ -99,7 +99,7 @@ export function LeadDetailsPanel({ lead, isClient, clientData }: LeadDetailsPane
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="font-heading text-xl font-medium text-text-main truncate">
-            {lead.nome_lead || 'Lead sem nome'}
+            {lead.nome_lead || lead.whatsapp_lead || 'Lead sem nome'}
           </h2>
           <div className="flex items-center gap-1.5 text-text-muted text-sm mt-0.5">
             <Phone size={14} />

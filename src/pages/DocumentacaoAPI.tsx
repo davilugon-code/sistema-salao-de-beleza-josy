@@ -287,7 +287,7 @@ export function DocumentacaoAPI() {
 
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-2">Requisição cURL</h3>
-              <CodeBlock code={`curl -X PUT ${baseUrl}/agendamentos/ID_DO_AGENDAMENTO \\
+              <CodeBlock code={`curl -X PUT ${baseUrl}/agendamentos-id/ID_DO_AGENDAMENTO \\
   -H "Authorization: Bearer ${tokenDisplay}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -344,7 +344,7 @@ export function DocumentacaoAPI() {
 
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-2">Requisição cURL</h3>
-              <CodeBlock code={`curl -X DELETE ${baseUrl}/agendamentos/ID_DO_AGENDAMENTO \\
+              <CodeBlock code={`curl -X DELETE ${baseUrl}/agendamentos-id/ID_DO_AGENDAMENTO \\
   -H "Authorization: Bearer ${tokenDisplay}" \\
   -H "Content-Type: application/json" \\
   -d '{

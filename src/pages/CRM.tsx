@@ -83,7 +83,25 @@ export function CRM() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  useEffect(() => {
+    fetchLeads();
+
+    // Inscreve no canal Realtime para escutar atualizações na tabela leads_estetica
+    const channel = supabase
+      .channel('leads_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leads_estetica' },
+        () => {
+          fetchLeads();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchLeads]);
 
   const onDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -209,7 +227,7 @@ export function CRM() {
                                 snapshot.isDragging && 'shadow-modal rotate-1 opacity-90'
                               )}
                             >
-                              <p className="font-medium text-text-main truncate">{lead.nome_lead || 'Lead sem nome'}</p>
+                              <p className="font-medium text-text-main truncate">{lead.nome_lead || lead.whatsapp_lead || 'Lead sem nome'}</p>
                               <div className="flex items-center gap-1 text-text-muted">
                                 <Phone size={12} />
                                 <span className="text-xs truncate">{lead.whatsapp_lead}</span>

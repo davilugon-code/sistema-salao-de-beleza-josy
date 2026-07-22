@@ -186,7 +186,7 @@ export function Agenda() {
     const dateStr = format(arg.date, 'yyyy-MM-dd');
     const timeStr = format(arg.date, 'HH:mm');
     const defaultEndTime = format(new Date(arg.date.getTime() + 60 * 60 * 1000), 'HH:mm');
-    
+
     const nextStart = getNextAppointmentStart(agendaId, dateStr, timeStr);
     const finalEndTime = (nextStart && nextStart < defaultEndTime) ? nextStart : defaultEndTime;
 
@@ -253,10 +253,10 @@ export function Agenda() {
       data_hora_fim: dataHoraFim,
       status: 'agendado',
     });
-    if (error) { 
+    if (error) {
       console.error('Erro ao criar agendamento no Supabase:', error);
-      addToast(`Erro ao criar agendamento: ${error.message}`, 'error'); 
-      return; 
+      addToast(`Erro ao criar agendamento: ${error.message}`, 'error');
+      return;
     }
 
     if (!newAppForm.leadId && newAppForm.clienteId) {
@@ -335,10 +335,10 @@ export function Agenda() {
       observacoes: updatedObs,
       status: 'agendado'
     }).eq('id', rescheduleModal.id);
-    if (error) { 
+    if (error) {
       console.error('Erro ao reagendar no Supabase:', error);
-      addToast(`Erro ao reagendar: ${error.message}`, 'error'); 
-      return; 
+      addToast(`Erro ao reagendar: ${error.message}`, 'error');
+      return;
     }
     addToast('Reagendado com sucesso!');
     setRescheduleModal(null);
@@ -364,12 +364,12 @@ export function Agenda() {
   const handleCreateAgenda = async () => {
     if (!newAgendaNome) return;
     const { data, error } = await supabase.from('agendas').insert({ nome: newAgendaNome, cor: newAgendaCor, ativo: true }).select().single();
-    if (error) { 
+    if (error) {
       console.error('Erro ao criar agenda no Supabase:', error);
-      addToast(`Erro ao criar agenda: ${error.message}`, 'error'); 
-      return; 
+      addToast(`Erro ao criar agenda: ${error.message}`, 'error');
+      return;
     }
-    
+
     // Insere os horários de funcionamento padrão configurados no modal de criação
     const hoursToInsert = Object.values(newHours).map((h) => ({ ...h, agenda_id: data.id }));
     const { error: hoursError } = await supabase.from('agenda_hours').insert(hoursToInsert);
@@ -379,7 +379,7 @@ export function Agenda() {
     } else {
       addToast('Agenda criada com sucesso!');
     }
-    
+
     setNewAgendaModal(false);
     setNewAgendaNome('');
     fetchAgendas();
@@ -462,7 +462,7 @@ export function Agenda() {
               <h2 className="font-heading text-xl font-medium text-text-main">{agenda.nome}</h2>
               <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 bg-base border border-border-card rounded text-text-muted">
                 <span>ID: {agenda.id}</span>
-                <button 
+                <button
                   onClick={() => {
                     navigator.clipboard.writeText(agenda.id);
                     addToast('ID da agenda copiado!');
@@ -493,10 +493,10 @@ export function Agenda() {
               locale={ptBrLocale}
               headerToolbar={false}
               timeZone="local"
-              slotMinTime="06:00:00"
-              slotMaxTime="22:00:00"
-              slotDuration="00:60:00"
-              snapDuration="00:05:00"
+              slotMinTime="08:30:00"
+              slotMaxTime="18:00:00"
+              slotDuration="00:10:00"
+              snapDuration="00:10:00"
               allDaySlot={false}
               height="auto"
               events={events[agenda.id] || []}
@@ -640,8 +640,8 @@ export function Agenda() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Procedimento</label>
-              <Input 
-                value={newAppForm.procedimento} 
+              <Input
+                value={newAppForm.procedimento}
                 onChange={(e) => {
                   const proc = e.target.value;
                   setNewAppForm({ ...newAppForm, procedimento: proc });
@@ -650,21 +650,21 @@ export function Agenda() {
                     const duracao = calcularDuracaoProcedimento(proc);
                     const dataHoraFim = adicionarMinutos(dataHora, duracao);
                     const formattedEndTime = obterHoraMinuto(dataHoraFim);
-                    
+
                     const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
                     const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
                     setNewAppModal({ ...newAppModal, endTime: finalEndTime });
                   }
-                }} 
-                placeholder="Ex: Limpeza de pele" 
+                }}
+                placeholder="Ex: Limpeza de pele"
               />
             </div>
             <div className="flex gap-3">
               <div className="flex-2">
                 <label className="block text-sm font-medium mb-1">Data</label>
-                <Input 
-                  type="date" 
-                  value={newAppModal.date} 
+                <Input
+                  type="date"
+                  value={newAppModal.date}
                   onChange={(e) => {
                     const newDate = e.target.value;
                     const nextStart = getNextAppointmentStart(newAppModal.agendaId, newDate, newAppModal.time);
@@ -673,14 +673,14 @@ export function Agenda() {
                       finalEndTime = nextStart;
                     }
                     setNewAppModal({ ...newAppModal, date: newDate, endTime: finalEndTime });
-                  }} 
+                  }}
                 />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Início</label>
-                <Input 
-                  type="time" 
-                  value={newAppModal.time} 
+                <Input
+                  type="time"
+                  value={newAppModal.time}
                   onChange={(e) => {
                     const newTime = e.target.value;
                     if (!endTimeManuallyEdited.current) {
@@ -688,21 +688,21 @@ export function Agenda() {
                       const duracao = calcularDuracaoProcedimento(newAppForm.procedimento);
                       const dataHoraFim = adicionarMinutos(dataHora, duracao);
                       const formattedEndTime = obterHoraMinuto(dataHoraFim);
-                      
+
                       const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newTime);
                       const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
                       setNewAppModal({ ...newAppModal, time: newTime, endTime: finalEndTime });
                     } else {
                       setNewAppModal({ ...newAppModal, time: newTime });
                     }
-                  }} 
+                  }}
                 />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Fim</label>
-                <Input 
-                  type="time" 
-                  value={newAppModal.endTime} 
+                <Input
+                  type="time"
+                  value={newAppModal.endTime}
                   onChange={(e) => {
                     const val = e.target.value;
                     endTimeManuallyEdited.current = true;
@@ -711,7 +711,7 @@ export function Agenda() {
                       addToast(`Atenção: O próximo agendamento começa às ${nextStart}`, 'warning');
                     }
                     setNewAppModal({ ...newAppModal, endTime: val });
-                  }} 
+                  }}
                 />
               </div>
             </div>
@@ -749,22 +749,22 @@ export function Agenda() {
               </select>
             </div>
             <div className="flex gap-2 pt-2">
-              <Button 
-                variant="secondary" 
-                className="flex-1" 
+              <Button
+                variant="secondary"
+                className="flex-1"
                 onClick={() => {
                   const startStr = viewAppModal.data_hora_inicio;
                   const endStr = viewAppModal.data_hora_fim;
                   const dateStr = startStr.split('T')[0];
                   const timeStr = obterHoraMinuto(startStr);
-                  const calculatedEndTime = endStr 
-                    ? obterHoraMinuto(endStr) 
+                  const calculatedEndTime = endStr
+                    ? obterHoraMinuto(endStr)
                     : obterHoraMinuto(adicionarMinutos(startStr, 60));
-                  
+
                   endTimeManuallyEdited.current = false;
                   const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, dateStr, timeStr, viewAppModal.id);
                   const finalEndTime = (nextStart && nextStart < calculatedEndTime) ? nextStart : calculatedEndTime;
-                  
+
                   setRescheduleModal({
                     id: viewAppModal.id,
                     date: dateStr,
@@ -790,9 +790,9 @@ export function Agenda() {
             <div className="flex gap-3">
               <div className="flex-2">
                 <label className="block text-sm font-medium mb-1">Nova data</label>
-                <Input 
-                  type="date" 
-                  value={rescheduleModal.date} 
+                <Input
+                  type="date"
+                  value={rescheduleModal.date}
                   onChange={(e) => {
                     const newDate = e.target.value;
                     const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, newDate, rescheduleModal.time, rescheduleModal.id);
@@ -801,14 +801,14 @@ export function Agenda() {
                       finalEndTime = nextStart;
                     }
                     setRescheduleModal({ ...rescheduleModal, date: newDate, endTime: finalEndTime });
-                  }} 
+                  }}
                 />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Início</label>
-                <Input 
-                  type="time" 
-                  value={rescheduleModal.time} 
+                <Input
+                  type="time"
+                  value={rescheduleModal.time}
                   onChange={(e) => {
                     const newTime = e.target.value;
                     if (!endTimeManuallyEdited.current) {
@@ -816,21 +816,21 @@ export function Agenda() {
                       const duracao = calcularDuracaoProcedimento(viewAppModal.procedimento_nome);
                       const dataHoraFim = adicionarMinutos(dataHora, duracao);
                       const formattedEndTime = obterHoraMinuto(dataHoraFim);
-                      
+
                       const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, rescheduleModal.date, newTime, rescheduleModal.id);
                       const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
                       setRescheduleModal({ ...rescheduleModal, time: newTime, endTime: finalEndTime });
                     } else {
                       setRescheduleModal({ ...rescheduleModal, time: newTime });
                     }
-                  }} 
+                  }}
                 />
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium mb-1">Fim</label>
-                <Input 
-                  type="time" 
-                  value={rescheduleModal.endTime} 
+                <Input
+                  type="time"
+                  value={rescheduleModal.endTime}
                   onChange={(e) => {
                     const val = e.target.value;
                     endTimeManuallyEdited.current = true;
@@ -839,7 +839,7 @@ export function Agenda() {
                       addToast(`Atenção: O próximo agendamento começa às ${nextStart}`, 'warning');
                     }
                     setRescheduleModal({ ...rescheduleModal, endTime: val });
-                  }} 
+                  }}
                 />
               </div>
             </div>
