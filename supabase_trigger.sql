@@ -111,3 +111,24 @@ BEFORE UPDATE
 ON public.leads_estetica
 FOR EACH ROW
 EXECUTE FUNCTION public.sincronizar_lead_para_agendamento();
+
+-- 3. Cálculo de Duração (Respeita data_hora_fim informada)
+CREATE OR REPLACE FUNCTION public.calculate_data_hora_fim()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.data_hora_fim IS NOT NULL AND NEW.data_hora_fim > NEW.data_hora_inicio THEN
+    RETURN NEW;
+  END IF;
+
+  NEW.data_hora_fim := NEW.data_hora_inicio + interval '30 minutes';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_agendamento_insert_update ON public.agendamentos_estetica;
+
+CREATE TRIGGER on_agendamento_insert_update
+BEFORE INSERT OR UPDATE ON public.agendamentos_estetica
+FOR EACH ROW
+EXECUTE FUNCTION public.calculate_data_hora_fim();
+
