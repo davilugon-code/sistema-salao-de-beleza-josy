@@ -127,12 +127,46 @@ export function Agenda() {
       .eq('agenda_id', agendaId)
       .neq('status', 'cancelado');
     if (data) {
-      const mapped = data.map((e) => ({
-        id: e.id, title: `${e.nome_lead || e.whatsapp_lead || 'Lead'} — ${e.procedimento_nome || ''}`,
-        start: e.data_hora_inicio, end: e.data_hora_fim,
-        extendedProps: { ...e },
-      }));
+      const mapped = data.map((e) => {
+        const start = e.data_hora_inicio;
+        const dur = calcularDuracaoProcedimento(e.procedimento_nome);
+        const end = e.data_hora_fim || (start ? adicionarMinutos(start, dur) : null);
+        return {
+          id: e.id,
+          title: `${e.nome_lead || e.whatsapp_lead || 'Lead'} — ${e.procedimento_nome || ''}`,
+          start: start,
+          end: end,
+          extendedProps: { ...e, data_hora_fim: end },
+        };
+      });
       setEvents((prev) => ({ ...prev, [agendaId]: mapped }));
+    }
+  };
+
+  const handleEventDropOrResize = async (info: any) => {
+    const { event } = info;
+    const agendaId = event.extendedProps.agenda_id;
+    const newStart = format(event.start, "yyyy-MM-dd'T'HH:mm:ss");
+    const newEnd = event.end ? format(event.end, "yyyy-MM-dd'T'HH:mm:ss") : null;
+
+    const parts = (event.extendedProps.procedimento_nome || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
+    const updatedObs = newEnd ? atualizarObservacoesComHorario(event.extendedProps.observacoes, newStart, newEnd, parts.length) : event.extendedProps.observacoes;
+
+    const { error } = await supabase
+      .from('agendamentos_estetica')
+      .update({
+        data_hora_inicio: newStart,
+        data_hora_fim: newEnd,
+        observacoes: updatedObs,
+      })
+      .eq('id', event.id);
+
+    if (error) {
+      addToast(`Erro ao atualizar horário: ${error.message}`, 'error');
+      info.revert();
+    } else {
+      addToast('Horário atualizado com sucesso!');
+      fetchEvents(agendaId);
     }
   };
 
@@ -515,15 +549,21 @@ export function Agenda() {
               slotMaxTime="18:00:00"
               slotDuration="00:10:00"
               snapDuration="00:10:00"
+              defaultTimedEventDuration="00:30:00"
               selectable={true}
               selectMirror={true}
               unselectAuto={true}
+              editable={true}
+              eventDurationEditable={true}
+              eventStartEditable={true}
               allDaySlot={false}
               height="auto"
               events={events[agenda.id] || []}
               dateClick={handleSlotClick(agenda.id)}
               select={handleSelectRange(agenda.id)}
               eventClick={handleEventClick}
+              eventDrop={handleEventDropOrResize}
+              eventResize={handleEventDropOrResize}
               businessHours={getBusinessHours(agenda.id)}
               eventColor={agenda.cor}
               eventTextColor="#ffffff"

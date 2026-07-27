@@ -156,7 +156,7 @@ export function DocumentacaoAPI() {
                 <Badge variant="success" className="font-mono">POST</Badge>
                 <h2 className="font-heading text-2xl font-medium text-text-main">Marcar Agendamento</h2>
               </div>
-              <p className="text-text-muted">Cria um novo agendamento na agenda informada para um lead ou cliente existente no sistema. Duração fixa de 60 minutos.</p>
+              <p className="text-text-muted">Cria um novo agendamento na agenda informada para um lead ou cliente existente no sistema. Duração calculada conforme o procedimento ou configurada no agendamento.</p>
             </div>
 
             <div>
