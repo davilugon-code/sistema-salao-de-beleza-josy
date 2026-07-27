@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin, { DateClickArg } from '@fullcalendar/interaction';
-import { EventClickArg } from '@fullcalendar/core';
+import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -185,10 +185,28 @@ export function Agenda() {
     endTimeManuallyEdited.current = false;
     const dateStr = format(arg.date, 'yyyy-MM-dd');
     const timeStr = format(arg.date, 'HH:mm');
-    const defaultEndTime = format(new Date(arg.date.getTime() + 60 * 60 * 1000), 'HH:mm');
+    const defaultEndTime = format(new Date(arg.date.getTime() + 20 * 60 * 1000), 'HH:mm');
 
     const nextStart = getNextAppointmentStart(agendaId, dateStr, timeStr);
     const finalEndTime = (nextStart && nextStart < defaultEndTime) ? nextStart : defaultEndTime;
+
+    setNewAppModal({
+      agendaId,
+      date: dateStr,
+      time: timeStr,
+      endTime: finalEndTime,
+    });
+  };
+
+  const handleSelectRange = (agendaId: string) => (arg: DateSelectArg) => {
+    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+    endTimeManuallyEdited.current = true;
+    const dateStr = format(arg.start, 'yyyy-MM-dd');
+    const timeStr = format(arg.start, 'HH:mm');
+    const endTimeStr = format(arg.end, 'HH:mm');
+
+    const nextStart = getNextAppointmentStart(agendaId, dateStr, timeStr);
+    const finalEndTime = (nextStart && nextStart < endTimeStr) ? nextStart : endTimeStr;
 
     setNewAppModal({
       agendaId,
@@ -497,10 +515,14 @@ export function Agenda() {
               slotMaxTime="18:00:00"
               slotDuration="00:10:00"
               snapDuration="00:10:00"
+              selectable={true}
+              selectMirror={true}
+              unselectAuto={true}
               allDaySlot={false}
               height="auto"
               events={events[agenda.id] || []}
               dateClick={handleSlotClick(agenda.id)}
+              select={handleSelectRange(agenda.id)}
               eventClick={handleEventClick}
               businessHours={getBusinessHours(agenda.id)}
               eventColor={agenda.cor}
@@ -759,7 +781,7 @@ export function Agenda() {
                   const timeStr = obterHoraMinuto(startStr);
                   const calculatedEndTime = endStr
                     ? obterHoraMinuto(endStr)
-                    : obterHoraMinuto(adicionarMinutos(startStr, 60));
+                    : obterHoraMinuto(adicionarMinutos(startStr, calcularDuracaoProcedimento(viewAppModal.procedimento_nome)));
 
                   endTimeManuallyEdited.current = false;
                   const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, dateStr, timeStr, viewAppModal.id);

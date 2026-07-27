@@ -1,6 +1,6 @@
 export function calcularDuracaoProcedimento(procedimento: string | null | undefined): number {
   if (!procedimento) {
-    return 100; // 1h40 = 100 minutes (padrão)
+    return 30; // 30 minutes (padrão)
   }
 
   const parts = procedimento.split(/[,;+]|\s+e\s+/gi);
@@ -13,11 +13,11 @@ export function calcularDuracaoProcedimento(procedimento: string | null | undefi
     if (trimmed.includes('selagem') || trimmed.includes('selamento') || trimmed.includes('progressiva')) {
       totalMinutes += 240; // 4 hours
     } else {
-      totalMinutes += 100; // 1h40 = 100 minutes
+      totalMinutes += 30; // 30 minutes
     }
   }
 
-  return totalMinutes > 0 ? totalMinutes : 100;
+  return totalMinutes > 0 ? totalMinutes : 30;
 }
 
 export function adicionarMinutos(dataHoraStr: string, minutos: number): string {
