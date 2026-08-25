@@ -255,12 +255,37 @@ export function Agenda() {
   };
 
   const searchLeads = async (q: string) => {
-    if (!q || q.length < 2) { setLeadSuggestions([]); return; }
-    const { data: leads } = await supabase.from('leads_estetica').select('id, nome_lead, whatsapp_lead').or(`nome_lead.ilike.%${q}%,whatsapp_lead.ilike.%${q}%`).limit(5);
-    const { data: clientes } = await supabase.from('clientes_estetica').select('id, leads_estetica(id, nome_lead, whatsapp_lead)').limit(5);
-    const suggestions = [
-      ...(leads || []).map((l) => ({ id: l.id, nome: l.nome_lead, whatsapp: l.whatsapp_lead, tipo: 'lead' })),
-    ];
+    const cleanQuery = q ? q.trim() : '';
+    if (!cleanQuery || cleanQuery.length < 2) {
+      setLeadSuggestions([]);
+      return;
+    }
+
+    const { data: leads } = await supabase
+      .from('leads_estetica')
+      .select('id, nome_lead, whatsapp_lead')
+      .or(`nome_lead.ilike.%${cleanQuery}%,whatsapp_lead.ilike.%${cleanQuery}%`)
+      .limit(5);
+
+    const { data: clientes } = await supabase
+      .from('clientes_estetica')
+      .select('id, lead_id, leads_estetica(id, nome_lead, whatsapp_lead)')
+      .limit(5);
+
+    const clientLeadIds = new Set((clientes || []).map((c: any) => c.lead_id).filter(Boolean));
+
+    const suggestions: any[] = [];
+    (leads || []).forEach((l: any) => {
+      const isClient = clientLeadIds.has(l.id);
+      suggestions.push({
+        id: l.id,
+        leadId: l.id,
+        nome: l.nome_lead,
+        whatsapp: l.whatsapp_lead,
+        tipo: isClient ? 'cliente' : 'lead',
+      });
+    });
+
     setLeadSuggestions(suggestions);
   };
 
@@ -272,60 +297,88 @@ export function Agenda() {
     const updatedObs = atualizarObservacoesComHorario(newAppForm.obs, dataHora, dataHoraFim, parts.length);
 
     let targetLeadId = newAppForm.leadId;
-    const generatedWhatsapp = newAppForm.whatsapp || `sem-whatsapp-${Date.now()}`;
+    let targetClienteId = newAppForm.clienteId;
+    const whatsappNum = (newAppForm.whatsapp || '').trim();
+    const nomeLead = (newAppForm.nome || newAppForm.leadSearch || 'Lead Manual').trim();
 
-    if (!targetLeadId && !newAppForm.clienteId) {
+    if (!targetLeadId && targetClienteId) {
+      const { data: clientData } = await supabase
+        .from('clientes_estetica')
+        .select('lead_id')
+        .eq('id', targetClienteId)
+        .maybeSingle();
+      if (clientData?.lead_id) {
+        targetLeadId = clientData.lead_id;
+      }
+    }
+
+    if (!targetLeadId && whatsappNum) {
+      const { data: existingLead } = await supabase
+        .from('leads_estetica')
+        .select('id')
+        .eq('whatsapp_lead', whatsappNum)
+        .maybeSingle();
+
+      if (existingLead) {
+        targetLeadId = existingLead.id;
+      }
+    }
+
+    if (!targetLeadId && !targetClienteId) {
+      const whatsappToSave = whatsappNum || `manual-${Date.now()}`;
       const { data: createdLead, error: createLeadErr } = await supabase
         .from('leads_estetica')
         .insert({
-          nome_lead: newAppForm.nome || newAppForm.leadSearch || 'Lead Manual',
-          whatsapp_lead: generatedWhatsapp,
+          nome_lead: nomeLead,
+          whatsapp_lead: whatsappToSave,
           status: 'agendado',
+          inicio_atendimento: new Date().toISOString(),
+          data_agendamento: dataHora,
         })
         .select()
         .single();
 
       if (createLeadErr) {
-        console.error('Erro ao criar lead automático:', createLeadErr);
+        console.error('Erro ao criar lead:', createLeadErr);
         addToast(`Erro ao criar lead: ${createLeadErr.message}`, 'error');
         return;
       }
       targetLeadId = createdLead.id;
+    } else if (targetLeadId) {
+      const updatePayload: Record<string, any> = {
+        status: 'agendado',
+        data_agendamento: dataHora,
+      };
+      if (nomeLead && nomeLead !== 'Lead Manual') {
+        updatePayload.nome_lead = nomeLead;
+      }
+      if (whatsappNum && !whatsappNum.startsWith('manual-') && !whatsappNum.startsWith('sem-whatsapp-')) {
+        updatePayload.whatsapp_lead = whatsappNum;
+      }
+
+      await supabase
+        .from('leads_estetica')
+        .update(updatePayload)
+        .eq('id', targetLeadId);
     }
 
     const { error } = await supabase.from('agendamentos_estetica').insert({
       agenda_id: newAppModal.agendaId,
       lead_id: targetLeadId || null,
-      cliente_id: newAppForm.clienteId || null,
-      nome_lead: newAppForm.nome || newAppForm.leadSearch,
-      whatsapp_lead: newAppForm.whatsapp || null,
+      cliente_id: targetClienteId || null,
+      nome_lead: nomeLead,
+      whatsapp_lead: whatsappNum || null,
       procedimento_nome: newAppForm.procedimento,
       observacoes: updatedObs,
       data_hora_inicio: dataHora,
       data_hora_fim: dataHoraFim,
       status: 'agendado',
     });
+
     if (error) {
       console.error('Erro ao criar agendamento no Supabase:', error);
       addToast(`Erro ao criar agendamento: ${error.message}`, 'error');
       return;
-    }
-
-    if (!newAppForm.leadId && newAppForm.clienteId) {
-      const { data: clientData } = await supabase
-        .from('clientes_estetica')
-        .select('lead_id')
-        .eq('id', newAppForm.clienteId)
-        .single();
-      if (clientData?.lead_id) {
-        targetLeadId = clientData.lead_id;
-      }
-    }
-    if (targetLeadId) {
-      await supabase
-        .from('leads_estetica')
-        .update({ status: 'agendado', data_agendamento: dataHora })
-        .eq('id', targetLeadId);
     }
 
     addToast('Agendamento criado com sucesso!');
@@ -677,28 +730,66 @@ export function Agenda() {
       <Modal isOpen={!!newAppModal} onClose={() => setNewAppModal(null)} title="Novo Agendamento">
         {newAppModal && (
           <div className="space-y-4">
-            <div className="relative">
-              <label className="block text-sm font-medium mb-1">Lead ou Cliente</label>
-              <Input
-                placeholder="Buscar por nome ou WhatsApp..."
-                value={newAppForm.leadSearch}
-                onChange={(e) => {
-                  setNewAppForm({ ...newAppForm, leadSearch: e.target.value, nome: e.target.value });
-                  searchLeads(e.target.value);
-                }}
-              />
-              {leadSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-card border border-border-card rounded-input shadow-dropdown">
-                  {leadSuggestions.map((s) => (
-                    <button key={s.id} className="w-full text-left px-3 py-2 hover:bg-primary-light text-sm" onClick={() => {
-                      setNewAppForm({ ...newAppForm, leadSearch: s.nome || s.whatsapp, nome: s.nome || '', leadId: s.tipo === 'lead' ? s.id : '', clienteId: s.tipo === 'cliente' ? s.id : '', whatsapp: s.whatsapp || '' });
-                      setLeadSuggestions([]);
-                    }}>
-                      <span className="font-medium">{s.nome || 'Sem nome'}</span> — {s.whatsapp}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="relative">
+                <label className="block text-sm font-medium mb-1">Nome do Lead / Cliente</label>
+                <Input
+                  placeholder="Buscar por nome ou digite o nome..."
+                  value={newAppForm.nome}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewAppForm({ ...newAppForm, leadSearch: val, nome: val, leadId: '', clienteId: '' });
+                    searchLeads(val);
+                  }}
+                />
+                {leadSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-card border border-border-card rounded-input shadow-dropdown max-h-48 overflow-y-auto">
+                    {leadSuggestions.map((s) => (
+                      <button
+                        type="button"
+                        key={`${s.tipo}-${s.id}`}
+                        className="w-full text-left px-3 py-2 hover:bg-primary-light text-sm border-b border-border-card last:border-b-0"
+                        onClick={() => {
+                          setNewAppForm({
+                            ...newAppForm,
+                            leadSearch: s.nome || s.whatsapp,
+                            nome: s.nome || '',
+                            whatsapp: (s.whatsapp && !s.whatsapp.startsWith('manual-') && !s.whatsapp.startsWith('sem-whatsapp-')) ? s.whatsapp : '',
+                            leadId: s.tipo === 'lead' ? s.id : s.leadId || '',
+                            clienteId: s.tipo === 'cliente' ? s.id : '',
+                          });
+                          setLeadSuggestions([]);
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">{s.nome || 'Sem nome'}</span>
+                          <Badge variant={s.tipo === 'cliente' ? 'secondary' : 'default'} className="text-[10px] uppercase">
+                            {s.tipo === 'cliente' ? 'Cliente' : 'Lead'}
+                          </Badge>
+                        </div>
+                        {s.whatsapp && !s.whatsapp.startsWith('manual-') && !s.whatsapp.startsWith('sem-whatsapp-') && (
+                          <div className="text-xs text-text-muted mt-0.5">{s.whatsapp}</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">WhatsApp / Telefone</label>
+                <Input
+                  placeholder="Ex: (11) 99999-9999"
+                  value={newAppForm.whatsapp}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewAppForm({ ...newAppForm, whatsapp: val });
+                    if (val.length >= 3 && !newAppForm.leadId && !newAppForm.clienteId) {
+                      searchLeads(val);
+                    }
+                  }}
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Procedimento</label>
@@ -795,7 +886,8 @@ export function Agenda() {
         {viewAppModal && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-text-muted">Nome</span><p className="font-medium">{viewAppModal.nome_lead || viewAppModal.whatsapp_lead || '—'}</p></div>
+              <div><span className="text-text-muted">Nome</span><p className="font-medium">{viewAppModal.nome_lead || '—'}</p></div>
+              <div><span className="text-text-muted">WhatsApp</span><p className="font-medium">{viewAppModal.whatsapp_lead && !viewAppModal.whatsapp_lead.startsWith('manual-') && !viewAppModal.whatsapp_lead.startsWith('sem-whatsapp-') ? viewAppModal.whatsapp_lead : '—'}</p></div>
               <div><span className="text-text-muted">Procedimento</span><p className="font-medium">{viewAppModal.procedimento_nome || '—'}</p></div>
               <div><span className="text-text-muted">Início</span><p className="font-medium">{viewAppModal.data_hora_inicio ? format(new Date(viewAppModal.data_hora_inicio), 'dd/MM/yyyy HH:mm') : '—'}</p></div>
               <div><span className="text-text-muted">Fim</span><p className="font-medium">{viewAppModal.data_hora_fim ? format(new Date(viewAppModal.data_hora_fim), 'HH:mm') : '—'}</p></div>
