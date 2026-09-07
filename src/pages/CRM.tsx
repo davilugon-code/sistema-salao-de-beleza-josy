@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Phone, Clock } from 'lucide-react';
+import { Plus, Phone, Clock, Instagram, Cake } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { updateObsWithInstagram } from '../lib/instagram';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
@@ -62,9 +63,10 @@ export function CRM() {
   const [loading, setLoading] = useState(true);
   const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
   const [newLeadModal, setNewLeadModal] = useState(false);
+  const [activeMobileTab, setActiveMobileTab] = useState<string>('all');
   const [compareceuConfirm, setCompareceuConfirm] = useState<{ lead: Lead; destCol: string } | null>(null);
   const [pendingDrop, setPendingDrop] = useState<DropResult | null>(null);
-  const [newForm, setNewForm] = useState({ whatsapp: '', nome: '', procedimento: '', motivo: '' });
+  const [newForm, setNewForm] = useState({ whatsapp: '', nome: '', procedimento: '', motivo: '', instagram: '', dataNascimento: '' });
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -160,17 +162,20 @@ export function CRM() {
 
   const handleCreateLead = async () => {
     if (!newForm.whatsapp) { addToast('WhatsApp é obrigatório.', 'warning'); return; }
+    const obsWithInsta = updateObsWithInstagram('', newForm.instagram);
     const { error } = await supabase.from('leads_estetica').insert({
       whatsapp_lead: newForm.whatsapp,
       nome_lead: newForm.nome || null,
       procedimento_interesse: newForm.procedimento || null,
       motivo_contato: newForm.motivo || null,
       status: 'iniciou_atendimento',
+      data_nascimento: newForm.dataNascimento || null,
+      observacoes: obsWithInsta || null,
     });
     if (error) { addToast('Erro ao criar lead.', 'error'); return; }
     addToast('Lead criado com sucesso!');
     setNewLeadModal(false);
-    setNewForm({ whatsapp: '', nome: '', procedimento: '', motivo: '' });
+    setNewForm({ whatsapp: '', nome: '', procedimento: '', motivo: '', instagram: '', dataNascimento: '' });
     fetchLeads();
   };
 
@@ -193,12 +198,42 @@ export function CRM() {
         </Button>
       </div>
 
+      {/* Mobile Column Tabs */}
+      <div className="flex sm:hidden overflow-x-auto pb-2 mb-3 gap-1.5 scrollbar-none">
+        <button
+          onClick={() => setActiveMobileTab('all')}
+          className={cn(
+            'px-3 py-1.5 rounded-full text-xs font-medium shrink-0 transition-colors border border-border-card',
+            activeMobileTab === 'all' ? 'bg-primary text-white border-primary' : 'bg-card text-text-muted'
+          )}
+        >
+          Todas ({Object.values(columns).flat().length})
+        </button>
+        {COLUMNS.map((col) => {
+          const count = (columns[col.status] || []).length;
+          return (
+            <button
+              key={col.status}
+              onClick={() => setActiveMobileTab(col.status)}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium shrink-0 transition-colors border border-border-card flex items-center gap-1.5',
+                activeMobileTab === col.status ? 'bg-primary text-white border-primary' : 'bg-card text-text-muted'
+              )}
+            >
+              <span>{col.label.split(' ')[0]}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-4 flex-1">
           {COLUMNS.map((col) => {
+            if (activeMobileTab !== 'all' && activeMobileTab !== col.status) return null;
             const leads = columns[col.status] || [];
             return (
-              <div key={col.status} className="flex flex-col rounded-card border border-border-card min-w-[220px] w-[220px] shrink-0 bg-card shadow-card">
+              <div key={col.status} className="flex flex-col rounded-card border border-border-card w-full sm:w-[220px] sm:min-w-[220px] shrink-0 bg-card shadow-card">
                 <div className="p-3 rounded-t-card border-b border-border-card" style={{ backgroundColor: theme === 'dark' ? col.darkColor : col.color }}>
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-sm text-text-main">{col.label}</span>
@@ -281,6 +316,26 @@ export function CRM() {
           <div>
             <label className="block text-sm font-medium mb-1">Motivo do contato</label>
             <Input value={newForm.motivo} onChange={(e) => setNewForm({ ...newForm, motivo: e.target.value })} placeholder="Como chegou até o salão?" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Instagram</label>
+              <Input
+                placeholder="Ex: @usuario"
+                icon={<Instagram size={16} />}
+                value={newForm.instagram}
+                onChange={(e) => setNewForm({ ...newForm, instagram: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Data de Aniversário</label>
+              <Input
+                type="date"
+                icon={<Cake size={16} />}
+                value={newForm.dataNascimento}
+                onChange={(e) => setNewForm({ ...newForm, dataNascimento: e.target.value })}
+              />
+            </div>
           </div>
           <div className="pt-4 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setNewLeadModal(false)}>Cancelar</Button>

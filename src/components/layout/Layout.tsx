@@ -26,7 +26,7 @@ export function Layout() {
       
       <div className="flex-1 flex flex-col md:ml-[240px] overflow-hidden">
         <Header onMenuClick={() => setIsSidebarOpen(true)} />
-        <main className="flex-1 overflow-auto p-4 md:p-8">
+        <main className="flex-1 overflow-auto p-3 sm:p-6 md:p-8">
           <Outlet />
         </main>
       </div>

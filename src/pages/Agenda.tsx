@@ -4,13 +4,14 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin, { DateClickArg } from '@fullcalendar/interaction';
 import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
-import { format, addWeeks, subWeeks, startOfWeek, endOfWeek } from 'date-fns';
+import { format, addWeeks, subWeeks, addDays, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy, Instagram, Cake } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { calcularDuracaoProcedimento, adicionarMinutos, atualizarObservacoesComHorario, obterHoraMinuto } from '../lib/duracao';
+import { parseInstagram, updateObsWithInstagram } from '../lib/instagram';
 import { useAuth } from '../contexts/AuthContext';
-import { Button } from '../components/ui/Button';
+import { Button, cn } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { Modal } from '../components/ui/Modal';
@@ -58,6 +59,7 @@ export function Agenda() {
   const [events, setEvents] = useState<Record<string, any[]>>({});
   const [agendaHours, setAgendaHours] = useState<Record<string, AgendaHourRow[]>>({});
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [calendarView, setCalendarView] = useState<'timeGridDay' | 'timeGridWeek'>(() => window.innerWidth < 640 ? 'timeGridDay' : 'timeGridWeek');
   const calendarRefs = useRef<Record<string, FullCalendar | null>>({});
 
   // Modal states
@@ -83,7 +85,7 @@ export function Agenda() {
     sexta: { dia: 'sexta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
     sabado: { dia: 'sabado', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
   });
-  const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+  const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
   const [leadSuggestions, setLeadSuggestions] = useState<any[]>([]);
 
   useEffect(() => {
@@ -201,8 +203,10 @@ export function Agenda() {
     return null;
   };
 
-  const navigateWeek = (dir: 1 | -1) => {
-    const next = dir === 1 ? addWeeks(currentDate, 1) : subWeeks(currentDate, 1);
+  const navigateDate = (dir: 1 | -1) => {
+    const next = calendarView === 'timeGridDay'
+      ? (dir === 1 ? addDays(currentDate, 1) : subDays(currentDate, 1))
+      : (dir === 1 ? addWeeks(currentDate, 1) : subWeeks(currentDate, 1));
     setCurrentDate(next);
     Object.values(calendarRefs.current).forEach((ref) => {
       if (ref) {
@@ -212,10 +216,21 @@ export function Agenda() {
     });
   };
 
-  const weekLabel = `${format(startOfWeek(currentDate, { locale: ptBR }), 'dd/MM')} - ${format(endOfWeek(currentDate, { locale: ptBR }), 'dd/MM/yyyy')}`;
+  const handleViewChange = (view: 'timeGridDay' | 'timeGridWeek') => {
+    setCalendarView(view);
+    Object.values(calendarRefs.current).forEach((ref) => {
+      if (ref) {
+        ref.getApi().changeView(view);
+      }
+    });
+  };
+
+  const dateLabel = calendarView === 'timeGridDay'
+    ? format(currentDate, "EEEE, dd 'de' MMMM", { locale: ptBR })
+    : `${format(startOfWeek(currentDate, { locale: ptBR }), 'dd/MM')} - ${format(endOfWeek(currentDate, { locale: ptBR }), 'dd/MM/yyyy')}`;
 
   const handleSlotClick = (agendaId: string) => (arg: DateClickArg) => {
-    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
     endTimeManuallyEdited.current = false;
     const dateStr = format(arg.date, 'yyyy-MM-dd');
     const timeStr = format(arg.date, 'HH:mm');
@@ -233,7 +248,7 @@ export function Agenda() {
   };
 
   const handleSelectRange = (agendaId: string) => (arg: DateSelectArg) => {
-    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '' });
+    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
     endTimeManuallyEdited.current = true;
     const dateStr = format(arg.start, 'yyyy-MM-dd');
     const timeStr = format(arg.start, 'HH:mm');
@@ -263,13 +278,13 @@ export function Agenda() {
 
     const { data: leads } = await supabase
       .from('leads_estetica')
-      .select('id, nome_lead, whatsapp_lead')
+      .select('id, nome_lead, whatsapp_lead, data_nascimento, observacoes')
       .or(`nome_lead.ilike.%${cleanQuery}%,whatsapp_lead.ilike.%${cleanQuery}%`)
       .limit(5);
 
     const { data: clientes } = await supabase
       .from('clientes_estetica')
-      .select('id, lead_id, leads_estetica(id, nome_lead, whatsapp_lead)')
+      .select('id, lead_id, data_primeira_visita, leads_estetica(id, nome_lead, whatsapp_lead, data_nascimento, observacoes)')
       .limit(5);
 
     const clientLeadIds = new Set((clientes || []).map((c: any) => c.lead_id).filter(Boolean));
@@ -282,6 +297,8 @@ export function Agenda() {
         leadId: l.id,
         nome: l.nome_lead,
         whatsapp: l.whatsapp_lead,
+        data_nascimento: l.data_nascimento,
+        observacoes: l.observacoes,
         tipo: isClient ? 'cliente' : 'lead',
       });
     });
@@ -294,7 +311,8 @@ export function Agenda() {
     const dataHora = `${newAppModal.date}T${newAppModal.time}:00`;
     const dataHoraFim = `${newAppModal.date}T${newAppModal.endTime}:00`;
     const parts = (newAppForm.procedimento || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
-    const updatedObs = atualizarObservacoesComHorario(newAppForm.obs, dataHora, dataHoraFim, parts.length);
+    const obsWithInsta = updateObsWithInstagram(newAppForm.obs, newAppForm.instagram);
+    const updatedObs = atualizarObservacoesComHorario(obsWithInsta, dataHora, dataHoraFim, parts.length);
 
     let targetLeadId = newAppForm.leadId;
     let targetClienteId = newAppForm.clienteId;
@@ -334,6 +352,8 @@ export function Agenda() {
           status: 'agendado',
           inicio_atendimento: new Date().toISOString(),
           data_agendamento: dataHora,
+          data_nascimento: newAppForm.dataNascimento || null,
+          observacoes: updatedObs,
         })
         .select()
         .single();
@@ -348,12 +368,16 @@ export function Agenda() {
       const updatePayload: Record<string, any> = {
         status: 'agendado',
         data_agendamento: dataHora,
+        observacoes: updatedObs,
       };
       if (nomeLead && nomeLead !== 'Lead Manual') {
         updatePayload.nome_lead = nomeLead;
       }
       if (whatsappNum && !whatsappNum.startsWith('manual-') && !whatsappNum.startsWith('sem-whatsapp-')) {
         updatePayload.whatsapp_lead = whatsappNum;
+      }
+      if (newAppForm.dataNascimento) {
+        updatePayload.data_nascimento = newAppForm.dataNascimento;
       }
 
       await supabase
@@ -533,22 +557,57 @@ export function Agenda() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigateWeek(-1)} className="p-2 hover:bg-primary-light rounded-button text-text-muted hover:text-primary transition-colors border border-border-card">
-            <ChevronLeft size={20} />
+      {/* Navigation & Controls */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center justify-between sm:justify-start gap-2 bg-card p-1.5 rounded-card border border-border-card shadow-card">
+          <button
+            onClick={() => navigateDate(-1)}
+            className="p-2 hover:bg-primary-light rounded-button text-text-muted hover:text-primary transition-colors border border-border-card shrink-0"
+            aria-label="Anterior"
+          >
+            <ChevronLeft size={18} />
           </button>
-          <span className="font-heading text-xl text-text-main min-w-[200px] text-center">{weekLabel}</span>
-          <button onClick={() => navigateWeek(1)} className="p-2 hover:bg-primary-light rounded-button text-text-muted hover:text-primary transition-colors border border-border-card">
-            <ChevronRight size={20} />
+          <span className="font-heading text-base sm:text-lg font-medium text-text-main min-w-[150px] text-center capitalize px-2 truncate">
+            {dateLabel}
+          </span>
+          <button
+            onClick={() => navigateDate(1)}
+            className="p-2 hover:bg-primary-light rounded-button text-text-muted hover:text-primary transition-colors border border-border-card shrink-0"
+            aria-label="Próximo"
+          >
+            <ChevronRight size={18} />
           </button>
         </div>
-        {role === 'admin' && (
-          <Button onClick={openNewAgendaModal}>
-            <Plus size={18} className="mr-1" /> Nova agenda
-          </Button>
-        )}
+
+        <div className="flex items-center justify-between sm:justify-end gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex bg-base p-1 rounded-button border border-border-card">
+            <button
+              onClick={() => handleViewChange('timeGridDay')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                calendarView === 'timeGridDay' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-text-main'
+              )}
+            >
+              Dia
+            </button>
+            <button
+              onClick={() => handleViewChange('timeGridWeek')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                calendarView === 'timeGridWeek' ? 'bg-primary text-white shadow-sm' : 'text-text-muted hover:text-text-main'
+              )}
+            >
+              Semana
+            </button>
+          </div>
+
+          {role === 'admin' && (
+            <Button onClick={openNewAgendaModal} className="text-xs sm:text-sm py-2 px-3">
+              <Plus size={16} className="mr-1" /> Nova agenda
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Calendar blocks */}
@@ -565,14 +624,15 @@ export function Agenda() {
           <div className="flex items-center justify-between p-4 border-b border-border-card">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="font-heading text-xl font-medium text-text-main">{agenda.nome}</h2>
-              <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 bg-base border border-border-card rounded text-text-muted">
-                <span>ID: {agenda.id}</span>
+              <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 bg-base border border-border-card rounded text-text-muted max-w-[180px] sm:max-w-none truncate">
+                <span className="hidden sm:inline">ID: {agenda.id}</span>
+                <span className="sm:hidden">ID: {agenda.id.substring(0, 8)}...</span>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(agenda.id);
                     addToast('ID da agenda copiado!');
                   }}
-                  className="hover:text-primary transition-colors p-0.5"
+                  className="hover:text-primary transition-colors p-0.5 shrink-0"
                   title="Copiar ID da Agenda"
                 >
                   <Copy size={12} />
@@ -594,7 +654,7 @@ export function Agenda() {
             <FullCalendar
               ref={(ref) => { calendarRefs.current[agenda.id] = ref; }}
               plugins={[timeGridPlugin, interactionPlugin]}
-              initialView="timeGridWeek"
+              initialView={calendarView}
               locale={ptBrLocale}
               headerToolbar={false}
               timeZone="local"
@@ -757,6 +817,8 @@ export function Agenda() {
                             whatsapp: (s.whatsapp && !s.whatsapp.startsWith('manual-') && !s.whatsapp.startsWith('sem-whatsapp-')) ? s.whatsapp : '',
                             leadId: s.tipo === 'lead' ? s.id : s.leadId || '',
                             clienteId: s.tipo === 'cliente' ? s.id : '',
+                            instagram: parseInstagram(s.observacoes),
+                            dataNascimento: s.data_nascimento ? s.data_nascimento.split('T')[0] : '',
                           });
                           setLeadSuggestions([]);
                         }}
@@ -788,6 +850,26 @@ export function Agenda() {
                       searchLeads(val);
                     }
                   }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Instagram</label>
+                <Input
+                  placeholder="Ex: @usuario"
+                  icon={<Instagram size={16} />}
+                  value={newAppForm.instagram}
+                  onChange={(e) => setNewAppForm({ ...newAppForm, instagram: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Data de Aniversário</label>
+                <Input
+                  type="date"
+                  icon={<Cake size={16} />}
+                  value={newAppForm.dataNascimento}
+                  onChange={(e) => setNewAppForm({ ...newAppForm, dataNascimento: e.target.value })}
                 />
               </div>
             </div>

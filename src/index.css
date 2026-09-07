@@ -67,6 +67,11 @@
   color: var(--text-main) !important;
   font-family: var(--font-heading);
   text-decoration: none !important;
+  white-space: normal !important;
+  word-break: break-word;
+  display: inline-block;
+  text-align: center;
+  padding: 4px 2px !important;
 }
 
 .fc .fc-timegrid-slot-label-cushion, 
@@ -90,3 +95,22 @@
 .fc .fc-theme-standard th {
   border-color: var(--border-card) !important;
 }
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .fc .fc-col-header-cell-cushion {
+    font-size: 0.72rem !important;
+    padding: 3px 1px !important;
+    line-height: 1.2 !important;
+  }
+  
+  .fc .fc-timegrid-slot-label-cushion {
+    font-size: 0.68rem !important;
+  }
+
+  .fc .fc-event-title {
+    font-size: 0.7rem !important;
+    line-height: 1.1 !important;
+  }
+}
+

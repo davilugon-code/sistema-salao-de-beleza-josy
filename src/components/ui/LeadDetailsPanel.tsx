@@ -1,9 +1,10 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Phone, User, Calendar, Clock, DollarSign, FileText, ChevronRight } from 'lucide-react';
+import { Phone, User, Calendar, Clock, DollarSign, FileText, ChevronRight, Instagram } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from './Badge';
 import { Button } from './Button';
+import { parseInstagram } from '../../lib/instagram';
 
 interface Lead {
   id: string;
@@ -139,13 +140,35 @@ export function LeadDetailsPanel({ lead, isClient, clientData }: LeadDetailsPane
       )}
 
       {/* Dados Pessoais */}
-      {(lead.data_nascimento || lead.genero || lead.valor_pago !== null) && (
-        <Section title="Dados Pessoais">
-          <InfoRow label="Data de nascimento" value={lead.data_nascimento ? format(new Date(lead.data_nascimento + 'T12:00:00'), 'dd/MM/yyyy') : null} />
-          <InfoRow label="Gênero" value={lead.genero} />
-          <InfoRow label="Valor pago" value={formatMoney(lead.valor_pago)} />
-        </Section>
-      )}
+      {(() => {
+        const instagramHandle = parseInstagram(lead.observacoes, (lead as any).instagram);
+        const hasPersonalData = lead.data_nascimento || lead.genero || lead.valor_pago !== null || instagramHandle;
+        if (!hasPersonalData) return null;
+
+        return (
+          <Section title="Dados Pessoais">
+            {instagramHandle && (
+              <InfoRow
+                label="Instagram"
+                value={
+                  <a
+                    href={`https://instagram.com/${instagramHandle.replace('@', '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline font-medium"
+                  >
+                    <Instagram size={14} />
+                    {instagramHandle}
+                  </a>
+                }
+              />
+            )}
+            <InfoRow label="Data de aniversário" value={lead.data_nascimento ? format(new Date(lead.data_nascimento + 'T12:00:00'), 'dd/MM/yyyy') : null} />
+            <InfoRow label="Gênero" value={lead.genero} />
+            <InfoRow label="Valor pago" value={formatMoney(lead.valor_pago)} />
+          </Section>
+        );
+      })()}
 
       {/* Agendamento */}
       {(lead.data_agendamento || lead.id_agendamento) && (

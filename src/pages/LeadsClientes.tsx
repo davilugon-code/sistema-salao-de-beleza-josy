@@ -191,7 +191,7 @@ export function LeadsClientes() {
         icon={<Search size={16} />}
         value={search}
         onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-        className="max-w-sm"
+        className="w-full sm:max-w-sm"
       />
 
       {/* Table */}
@@ -208,16 +208,16 @@ export function LeadsClientes() {
             </div>
           ) : (
             <div className="bg-card rounded-card border border-border-card shadow-card overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="border-b border-border-card text-xs text-text-muted uppercase bg-base">
+              <table className="w-full text-xs sm:text-sm text-left min-w-[650px]">
+                <thead className="border-b border-border-card text-[11px] sm:text-xs text-text-muted uppercase bg-base">
                   <tr>
-                    <th className="px-4 py-3">Nome</th>
-                    <th className="px-4 py-3">WhatsApp</th>
-                    <th className="px-4 py-3">Procedimento</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Última msg</th>
-                    <th className="px-4 py-3">Agendamento</th>
-                    <th className="px-4 py-3">Iniciou em</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Nome</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">WhatsApp</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Procedimento</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Status</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Última msg</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Agendamento</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Iniciou em</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -227,15 +227,15 @@ export function LeadsClientes() {
                       onClick={() => setDrawerItem({ lead })}
                       className="border-b border-border-card hover:bg-primary-light/30 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 font-medium text-text-main">{lead.nome_lead || lead.whatsapp_lead || 'Sem nome'}</td>
-                      <td className="px-4 py-3 text-text-muted">{lead.whatsapp_lead}</td>
-                      <td className="px-4 py-3 text-text-muted max-w-[120px] truncate">{lead.procedimento_interesse || '—'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 font-medium text-text-main">{lead.nome_lead || lead.whatsapp_lead || 'Sem nome'}</td>
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">{lead.whatsapp_lead}</td>
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted max-w-[120px] truncate">{lead.procedimento_interesse || '—'}</td>
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3">
                         <Badge variant={lead.status}>{STATUS_LABELS[lead.status] || lead.status}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-text-muted">{formatRelative(lead.ultima_mensagem)}</td>
-                      <td className="px-4 py-3 text-text-muted">{formatBR(lead.data_agendamento)}</td>
-                      <td className="px-4 py-3 text-text-muted">{formatBR(lead.inicio_atendimento)}</td>
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">{formatRelative(lead.ultima_mensagem)}</td>
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">{formatBR(lead.data_agendamento)}</td>
+                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">{formatBR(lead.inicio_atendimento)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -253,14 +253,14 @@ export function LeadsClientes() {
             </div>
           ) : (
             <div className="bg-card rounded-card border border-border-card shadow-card overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="border-b border-border-card text-xs text-text-muted uppercase bg-base">
+              <table className="w-full text-xs sm:text-sm text-left min-w-[600px]">
+                <thead className="border-b border-border-card text-[11px] sm:text-xs text-text-muted uppercase bg-base">
                   <tr>
-                    <th className="px-4 py-3">Nome</th>
-                    <th className="px-4 py-3">WhatsApp</th>
-                    <th className="px-4 py-3">Procedimentos</th>
-                    <th className="px-4 py-3">Próximo agendamento</th>
-                    <th className="px-4 py-3">Cliente desde</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Nome</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">WhatsApp</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Procedimentos</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Próximo agendamento</th>
+                    <th className="px-3 sm:px-4 py-2.5 sm:py-3">Cliente desde</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -276,11 +276,11 @@ export function LeadsClientes() {
                         })}
                         className="border-b border-border-card hover:bg-primary-light/30 cursor-pointer transition-colors"
                       >
-                        <td className="px-4 py-3 font-medium text-text-main">{lead?.nome_lead || lead?.whatsapp_lead || 'Sem nome'}</td>
-                        <td className="px-4 py-3 text-text-muted">{lead?.whatsapp_lead}</td>
-                        <td className="px-4 py-3 text-text-muted">—</td>
-                        <td className="px-4 py-3 text-text-muted">—</td>
-                        <td className="px-4 py-3 text-text-muted">{formatBR(c.data_primeira_visita)}</td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 font-medium text-text-main">{lead?.nome_lead || lead?.whatsapp_lead || 'Sem nome'}</td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">{lead?.whatsapp_lead}</td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">—</td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">—</td>
+                        <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-text-muted">{formatBR(c.data_primeira_visita)}</td>
                       </tr>
                     );
                   })}
