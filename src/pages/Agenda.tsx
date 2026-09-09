@@ -6,7 +6,7 @@ import { EventClickArg, DateSelectArg } from '@fullcalendar/core';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import { format, addWeeks, subWeeks, addDays, subDays, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy, Instagram, Cake } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit2, Trash2, Calendar, Copy, Instagram, Cake, DollarSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { calcularDuracaoProcedimento, adicionarMinutos, atualizarObservacoesComHorario, obterHoraMinuto } from '../lib/duracao';
 import { parseInstagram, updateObsWithInstagram } from '../lib/instagram';
@@ -19,6 +19,30 @@ import { Badge } from '../components/ui/Badge';
 import { ToastContainer, useToast } from '../components/ui/Toast';
 
 const PRESET_COLORS = ['#C47E7E', '#7A9E87', '#E8A87C', '#7B9EC4', '#B07ACA', '#CA7A9E', '#9EC47B', '#CA9E7A'];
+
+export function extrairValor(e: any): number {
+  if (e?.valor !== undefined && e?.valor !== null && e?.valor !== '') {
+    if (typeof e.valor === 'number') return e.valor;
+    const clean = String(e.valor).replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+    const num = parseFloat(clean);
+    if (!isNaN(num)) return num;
+  }
+  if (e?.observacoes) {
+    const match = e.observacoes.match(/\[Valor:\s*R\$\s*([\d.,]+)\]/i) ||
+                  e.observacoes.match(/Valor:\s*R\$\s*([\d.,]+)/i) ||
+                  e.observacoes.match(/\[Valor:\s*([\d.,]+)\]/i);
+    if (match && match[1]) {
+      const valStr = match[1].replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(valStr);
+      if (!isNaN(num)) return num;
+    }
+  }
+  return 0;
+}
+
+export function formatMoney(val: number): string {
+  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
 interface Agenda {
   id: string;
@@ -68,7 +92,7 @@ export function Agenda() {
   const [deleteAgendaModal, setDeleteAgendaModal] = useState<Agenda | null>(null);
   const [newAppModal, setNewAppModal] = useState<{ agendaId: string; date: string; time: string; endTime: string } | null>(null);
   const [viewAppModal, setViewAppModal] = useState<any | null>(null);
-  const [rescheduleModal, setRescheduleModal] = useState<{ id: string; date: string; time: string; endTime: string } | null>(null);
+  const [rescheduleModal, setRescheduleModal] = useState<{ id: string; date: string; time: string; endTime: string; valor: string } | null>(null);
   const endTimeManuallyEdited = useRef(false);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
 
@@ -85,7 +109,7 @@ export function Agenda() {
     sexta: { dia: 'sexta', aberto: true, hora_inicio: '08:00', hora_fim: '18:00' },
     sabado: { dia: 'sabado', aberto: false, hora_inicio: '08:00', hora_fim: '18:00' },
   });
-  const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
+  const [newAppForm, setNewAppForm] = useState({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', valor: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
   const [leadSuggestions, setLeadSuggestions] = useState<any[]>([]);
 
   useEffect(() => {
@@ -125,7 +149,7 @@ export function Agenda() {
 
   const fetchEvents = async (agendaId: string) => {
     const { data } = await supabase.from('agendamentos_estetica')
-      .select('id, nome_lead, whatsapp_lead, procedimento_nome, data_hora_inicio, data_hora_fim, status, observacoes, lead_id, cliente_id, agenda_id')
+      .select('*')
       .eq('agenda_id', agendaId)
       .neq('status', 'cancelado');
     if (data) {
@@ -133,12 +157,14 @@ export function Agenda() {
         const start = e.data_hora_inicio;
         const dur = calcularDuracaoProcedimento(e.procedimento_nome);
         const end = e.data_hora_fim || (start ? adicionarMinutos(start, dur) : null);
+        const val = extrairValor(e);
+        const valLabel = val > 0 ? ` (${formatMoney(val)})` : '';
         return {
           id: e.id,
-          title: `${e.nome_lead || e.whatsapp_lead || 'Lead'} — ${e.procedimento_nome || ''}`,
+          title: `${e.nome_lead || e.whatsapp_lead || 'Lead'} — ${e.procedimento_nome || ''}${valLabel}`,
           start: start,
           end: end,
-          extendedProps: { ...e, data_hora_fim: end },
+          extendedProps: { ...e, data_hora_fim: end, valor: val || e.valor },
         };
       });
       setEvents((prev) => ({ ...prev, [agendaId]: mapped }));
@@ -230,7 +256,7 @@ export function Agenda() {
     : `${format(startOfWeek(currentDate, { locale: ptBR }), 'dd/MM')} - ${format(endOfWeek(currentDate, { locale: ptBR }), 'dd/MM/yyyy')}`;
 
   const handleSlotClick = (agendaId: string) => (arg: DateClickArg) => {
-    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
+    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', valor: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
     endTimeManuallyEdited.current = false;
     const dateStr = format(arg.date, 'yyyy-MM-dd');
     const timeStr = format(arg.date, 'HH:mm');
@@ -248,7 +274,7 @@ export function Agenda() {
   };
 
   const handleSelectRange = (agendaId: string) => (arg: DateSelectArg) => {
-    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
+    setNewAppForm({ leadSearch: '', leadId: '', clienteId: '', procedimento: '', valor: '', obs: '', nome: '', whatsapp: '', instagram: '', dataNascimento: '' });
     endTimeManuallyEdited.current = true;
     const dateStr = format(arg.start, 'yyyy-MM-dd');
     const timeStr = format(arg.start, 'HH:mm');
@@ -312,7 +338,20 @@ export function Agenda() {
     const dataHoraFim = `${newAppModal.date}T${newAppModal.endTime}:00`;
     const parts = (newAppForm.procedimento || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
     const obsWithInsta = updateObsWithInstagram(newAppForm.obs, newAppForm.instagram);
-    const updatedObs = atualizarObservacoesComHorario(obsWithInsta, dataHora, dataHoraFim, parts.length);
+
+    let valorNum: number | null = null;
+    if (newAppForm.valor) {
+      const parsed = parseFloat(newAppForm.valor.replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(parsed) && parsed >= 0) valorNum = parsed;
+    }
+
+    let updatedObs = obsWithInsta;
+    if (valorNum !== null) {
+      const valorFormatted = valorNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      updatedObs = updatedObs.replace(/\[Valor:\s*R\$\s*[\d.,]+\]\s*/gi, '').trim();
+      updatedObs = updatedObs ? `${updatedObs}\n[Valor: R$ ${valorFormatted}]` : `[Valor: R$ ${valorFormatted}]`;
+    }
+    updatedObs = atualizarObservacoesComHorario(updatedObs, dataHora, dataHoraFim, parts.length);
 
     let targetLeadId = newAppForm.leadId;
     let targetClienteId = newAppForm.clienteId;
@@ -386,7 +425,7 @@ export function Agenda() {
         .eq('id', targetLeadId);
     }
 
-    const { error } = await supabase.from('agendamentos_estetica').insert({
+    const insertPayload: Record<string, any> = {
       agenda_id: newAppModal.agendaId,
       lead_id: targetLeadId || null,
       cliente_id: targetClienteId || null,
@@ -397,7 +436,15 @@ export function Agenda() {
       data_hora_inicio: dataHora,
       data_hora_fim: dataHoraFim,
       status: 'agendado',
-    });
+    };
+    if (valorNum !== null) insertPayload.valor = valorNum;
+
+    let { error } = await supabase.from('agendamentos_estetica').insert(insertPayload);
+    if (error && error.code === 'PGRST204' && insertPayload.valor !== undefined) {
+      delete insertPayload.valor;
+      const retry = await supabase.from('agendamentos_estetica').insert(insertPayload);
+      error = retry.error;
+    }
 
     if (error) {
       console.error('Erro ao criar agendamento no Supabase:', error);
@@ -456,14 +503,36 @@ export function Agenda() {
     const dataHora = `${rescheduleModal.date}T${rescheduleModal.time}:00`;
     const dataHoraFim = `${rescheduleModal.date}T${rescheduleModal.endTime}:00`;
     const parts = (viewAppModal.procedimento_nome || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
-    const updatedObs = atualizarObservacoesComHorario(viewAppModal.observacoes, dataHora, dataHoraFim, parts.length);
 
-    const { error } = await supabase.from('agendamentos_estetica').update({
+    let valorNum: number | null = null;
+    if (rescheduleModal.valor) {
+      const parsed = parseFloat(rescheduleModal.valor.replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(parsed) && parsed >= 0) valorNum = parsed;
+    }
+
+    let updatedObs = viewAppModal.observacoes || '';
+    if (valorNum !== null) {
+      const valorFormatted = valorNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      updatedObs = updatedObs.replace(/\[Valor:\s*R\$\s*[\d.,]+\]\s*/gi, '').trim();
+      updatedObs = updatedObs ? `${updatedObs}\n[Valor: R$ ${valorFormatted}]` : `[Valor: R$ ${valorFormatted}]`;
+    }
+    updatedObs = atualizarObservacoesComHorario(updatedObs, dataHora, dataHoraFim, parts.length);
+
+    const updatePayload: Record<string, any> = {
       data_hora_inicio: dataHora,
       data_hora_fim: dataHoraFim,
       observacoes: updatedObs,
       status: 'agendado'
-    }).eq('id', rescheduleModal.id);
+    };
+    if (valorNum !== null) updatePayload.valor = valorNum;
+
+    let { error } = await supabase.from('agendamentos_estetica').update(updatePayload).eq('id', rescheduleModal.id);
+    if (error && error.code === 'PGRST204' && updatePayload.valor !== undefined) {
+      delete updatePayload.valor;
+      const retry = await supabase.from('agendamentos_estetica').update(updatePayload).eq('id', rescheduleModal.id);
+      error = retry.error;
+    }
+
     if (error) {
       console.error('Erro ao reagendar no Supabase:', error);
       addToast(`Erro ao reagendar: ${error.message}`, 'error');
@@ -474,6 +543,43 @@ export function Agenda() {
     fetchEvents(viewAppModal.agenda_id);
     setViewAppModal(null);
   };
+
+  const calculateEarnings = useCallback((agendaId?: string) => {
+    let total = 0;
+    let count = 0;
+
+    const agendasToCalculate = agendaId ? [agendaId] : Object.keys(events);
+    const targetDateStr = format(currentDate, 'yyyy-MM-dd');
+    const weekStart = startOfWeek(currentDate, { locale: ptBR });
+    const weekEnd = endOfWeek(currentDate, { locale: ptBR });
+
+    agendasToCalculate.forEach((id) => {
+      const list = events[id] || [];
+      list.forEach((ev: any) => {
+        const ext = ev.extendedProps || {};
+        if (ext.status === 'cancelado') return;
+
+        const startStr = ext.data_hora_inicio || ev.start;
+        if (!startStr) return;
+
+        if (calendarView === 'timeGridDay') {
+          const evDateStr = typeof startStr === 'string' ? startStr.split('T')[0] : format(new Date(startStr), 'yyyy-MM-dd');
+          if (evDateStr === targetDateStr) {
+            total += extrairValor(ext);
+            count++;
+          }
+        } else {
+          const evDate = new Date(startStr);
+          if (evDate >= weekStart && evDate <= weekEnd) {
+            total += extrairValor(ext);
+            count++;
+          }
+        }
+      });
+    });
+
+    return { total, count };
+  }, [events, currentDate, calendarView]);
 
   const openNewAgendaModal = () => {
     setNewHours({
@@ -553,6 +659,8 @@ export function Agenda() {
     }));
   };
 
+  const totalEarnings = calculateEarnings();
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -610,6 +718,32 @@ export function Agenda() {
         </div>
       </div>
 
+      {/* Earnings Summary Banner */}
+      <div className="bg-card p-4 rounded-card border border-border-card shadow-card flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full shrink-0">
+            <DollarSign size={24} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                {calendarView === 'timeGridDay' ? 'Ganhos do Dia' : 'Ganhos da Semana'}
+              </span>
+              <Badge variant="secondary" className="text-[10px] py-0 px-1.5 font-normal">
+                {calendarView === 'timeGridDay' ? format(currentDate, 'dd/MM/yyyy') : `${format(startOfWeek(currentDate, { locale: ptBR }), 'dd/MM')} a ${format(endOfWeek(currentDate, { locale: ptBR }), 'dd/MM/yyyy')}`}
+              </Badge>
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-bold text-text-main font-heading mt-0.5">
+              {formatMoney(totalEarnings.total)}
+            </h3>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-start sm:self-center bg-base px-3 py-1.5 rounded-button border border-border-card text-xs text-text-muted">
+          <Calendar size={14} className="text-primary" />
+          <span>{totalEarnings.count} {totalEarnings.count === 1 ? 'agendamento ativo' : 'agendamentos ativos'}</span>
+        </div>
+      </div>
+
       {/* Calendar blocks */}
       {agendas.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-text-muted gap-2">
@@ -618,38 +752,44 @@ export function Agenda() {
         </div>
       )}
 
-      {agendas.map((agenda) => (
-        <Card key={agenda.id} className="overflow-hidden">
-          <div className="h-1.5" style={{ backgroundColor: agenda.cor }} />
-          <div className="flex items-center justify-between p-4 border-b border-border-card">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="font-heading text-xl font-medium text-text-main">{agenda.nome}</h2>
-              <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 bg-base border border-border-card rounded text-text-muted max-w-[180px] sm:max-w-none truncate">
-                <span className="hidden sm:inline">ID: {agenda.id}</span>
-                <span className="sm:hidden">ID: {agenda.id.substring(0, 8)}...</span>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(agenda.id);
-                    addToast('ID da agenda copiado!');
-                  }}
-                  className="hover:text-primary transition-colors p-0.5 shrink-0"
-                  title="Copiar ID da Agenda"
-                >
-                  <Copy size={12} />
-                </button>
+      {agendas.map((agenda) => {
+        const agendaEarnings = calculateEarnings(agenda.id);
+        return (
+          <Card key={agenda.id} className="overflow-hidden">
+            <div className="h-1.5" style={{ backgroundColor: agenda.cor }} />
+            <div className="flex items-center justify-between p-4 border-b border-border-card">
+              <div className="flex items-center gap-3 flex-wrap">
+                <h2 className="font-heading text-xl font-medium text-text-main">{agenda.nome}</h2>
+                <div className="flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 bg-base border border-border-card rounded text-text-muted max-w-[180px] sm:max-w-none truncate">
+                  <span className="hidden sm:inline">ID: {agenda.id}</span>
+                  <span className="sm:hidden">ID: {agenda.id.substring(0, 8)}...</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(agenda.id);
+                      addToast('ID da agenda copiado!');
+                    }}
+                    className="hover:text-primary transition-colors p-0.5 shrink-0"
+                    title="Copiar ID da Agenda"
+                  >
+                    <Copy size={12} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 px-2.5 py-0.5 rounded-full">
+                  <DollarSign size={13} />
+                  <span>Ganhos {calendarView === 'timeGridDay' ? 'do dia' : 'da semana'}: <strong>{formatMoney(agendaEarnings.total)}</strong></span>
+                </div>
               </div>
+              {role === 'admin' && (
+                <div className="flex gap-2">
+                  <button onClick={() => openEditAgenda(agenda)} className="p-1.5 hover:bg-primary-light rounded text-text-muted hover:text-primary transition-colors">
+                    <Edit2 size={16} />
+                  </button>
+                  <button onClick={() => setDeleteAgendaModal(agenda)} className="p-1.5 hover:bg-red-50 rounded text-text-muted hover:text-error transition-colors dark:hover:bg-red-900/20">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
             </div>
-            {role === 'admin' && (
-              <div className="flex gap-2">
-                <button onClick={() => openEditAgenda(agenda)} className="p-1.5 hover:bg-primary-light rounded text-text-muted hover:text-primary transition-colors">
-                  <Edit2 size={16} />
-                </button>
-                <button onClick={() => setDeleteAgendaModal(agenda)} className="p-1.5 hover:bg-red-50 rounded text-text-muted hover:text-error transition-colors dark:hover:bg-red-900/20">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            )}
-          </div>
           <div className="p-0 overflow-auto">
             <FullCalendar
               ref={(ref) => { calendarRefs.current[agenda.id] = ref; }}
@@ -683,7 +823,8 @@ export function Agenda() {
             />
           </div>
         </Card>
-      ))}
+      );
+    })}
 
       {/* New Agenda Modal */}
       <Modal isOpen={newAgendaModal} onClose={() => setNewAgendaModal(false)} title="Nova Agenda" className="max-w-2xl">
@@ -873,26 +1014,36 @@ export function Agenda() {
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Procedimento</label>
-              <Input
-                value={newAppForm.procedimento}
-                onChange={(e) => {
-                  const proc = e.target.value;
-                  setNewAppForm({ ...newAppForm, procedimento: proc });
-                  if (newAppModal && !endTimeManuallyEdited.current) {
-                    const dataHora = `${newAppModal.date}T${newAppModal.time}:00`;
-                    const duracao = calcularDuracaoProcedimento(proc);
-                    const dataHoraFim = adicionarMinutos(dataHora, duracao);
-                    const formattedEndTime = obterHoraMinuto(dataHoraFim);
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">Procedimento</label>
+                <Input
+                  value={newAppForm.procedimento}
+                  onChange={(e) => {
+                    const proc = e.target.value;
+                    setNewAppForm({ ...newAppForm, procedimento: proc });
+                    if (newAppModal && !endTimeManuallyEdited.current) {
+                      const dataHora = `${newAppModal.date}T${newAppModal.time}:00`;
+                      const duracao = calcularDuracaoProcedimento(proc);
+                      const dataHoraFim = adicionarMinutos(dataHora, duracao);
+                      const formattedEndTime = obterHoraMinuto(dataHoraFim);
 
-                    const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
-                    const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
-                    setNewAppModal({ ...newAppModal, endTime: finalEndTime });
-                  }
-                }}
-                placeholder="Ex: Limpeza de pele"
-              />
+                      const nextStart = getNextAppointmentStart(newAppModal.agendaId, newAppModal.date, newAppModal.time);
+                      const finalEndTime = (nextStart && nextStart < formattedEndTime) ? nextStart : formattedEndTime;
+                      setNewAppModal({ ...newAppModal, endTime: finalEndTime });
+                    }
+                  }}
+                  placeholder="Ex: Limpeza de pele"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Valor (R$) <span className="text-xs text-text-muted font-normal">(Opcional)</span></label>
+                <Input
+                  placeholder="Ex: 150,00"
+                  value={newAppForm.valor}
+                  onChange={(e) => setNewAppForm({ ...newAppForm, valor: e.target.value })}
+                />
+              </div>
             </div>
             <div className="flex gap-3">
               <div className="flex-2">
@@ -971,10 +1122,11 @@ export function Agenda() {
               <div><span className="text-text-muted">Nome</span><p className="font-medium">{viewAppModal.nome_lead || '—'}</p></div>
               <div><span className="text-text-muted">WhatsApp</span><p className="font-medium">{viewAppModal.whatsapp_lead && !viewAppModal.whatsapp_lead.startsWith('manual-') && !viewAppModal.whatsapp_lead.startsWith('sem-whatsapp-') ? viewAppModal.whatsapp_lead : '—'}</p></div>
               <div><span className="text-text-muted">Procedimento</span><p className="font-medium">{viewAppModal.procedimento_nome || '—'}</p></div>
+              <div><span className="text-text-muted">Valor</span><p className="font-medium text-emerald-600 dark:text-emerald-400">{extrairValor(viewAppModal) > 0 ? formatMoney(extrairValor(viewAppModal)) : '—'}</p></div>
               <div><span className="text-text-muted">Início</span><p className="font-medium">{viewAppModal.data_hora_inicio ? format(new Date(viewAppModal.data_hora_inicio), 'dd/MM/yyyy HH:mm') : '—'}</p></div>
               <div><span className="text-text-muted">Fim</span><p className="font-medium">{viewAppModal.data_hora_fim ? format(new Date(viewAppModal.data_hora_fim), 'HH:mm') : '—'}</p></div>
             </div>
-            {viewAppModal.observacoes && <p className="text-sm text-text-muted border-t border-border-card pt-3">{viewAppModal.observacoes}</p>}
+            {viewAppModal.observacoes && <p className="text-sm text-text-muted border-t border-border-card pt-3 whitespace-pre-line">{viewAppModal.observacoes}</p>}
             <div className="flex items-center gap-2 pt-2 border-t border-border-card">
               <span className="text-sm text-text-muted">Status:</span>
               <select className="flex-1 h-9 rounded-input border border-border-card bg-card px-2 text-sm text-text-main focus:outline-none focus:ring-1 focus:ring-primary"
@@ -1000,16 +1152,18 @@ export function Agenda() {
                   endTimeManuallyEdited.current = false;
                   const nextStart = getNextAppointmentStart(viewAppModal.agenda_id, dateStr, timeStr, viewAppModal.id);
                   const finalEndTime = (nextStart && nextStart < calculatedEndTime) ? nextStart : calculatedEndTime;
+                  const currentVal = extrairValor(viewAppModal);
 
                   setRescheduleModal({
                     id: viewAppModal.id,
                     date: dateStr,
                     time: timeStr,
                     endTime: finalEndTime,
+                    valor: currentVal > 0 ? String(currentVal) : '',
                   });
                 }}
               >
-                Reagendar
+                Reagendar / Editar
               </Button>
               <Button variant="danger" className="flex-1" onClick={() => setCancelConfirm(viewAppModal.id)}>
                 Cancelar
@@ -1020,7 +1174,7 @@ export function Agenda() {
       </Modal>
 
       {/* Reschedule Modal */}
-      <Modal isOpen={!!rescheduleModal} onClose={() => setRescheduleModal(null)} title="Reagendar/Editar Horário">
+      <Modal isOpen={!!rescheduleModal} onClose={() => setRescheduleModal(null)} title="Reagendar / Editar Agendamento">
         {rescheduleModal && (
           <div className="space-y-4">
             <div className="flex gap-3">
@@ -1078,6 +1232,14 @@ export function Agenda() {
                   }}
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Valor (R$) <span className="text-xs text-text-muted font-normal">(Opcional)</span></label>
+              <Input
+                placeholder="Ex: 150,00"
+                value={rescheduleModal.valor}
+                onChange={(e) => setRescheduleModal({ ...rescheduleModal, valor: e.target.value })}
+              />
             </div>
             <div className="pt-4 flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setRescheduleModal(null)}>Cancelar</Button>

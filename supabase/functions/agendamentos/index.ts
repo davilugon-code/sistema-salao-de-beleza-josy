@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
     const { supabase } = authResult;
 
     const body = await req.json();
-    const { agenda_id, lead_id, cliente_id, data, hora, procedimento_nome, nome_lead, whatsapp_lead, observacoes } = body;
+    const { agenda_id, lead_id, cliente_id, data, hora, procedimento_nome, nome_lead, whatsapp_lead, observacoes, valor } = body;
 
     if (!agenda_id) {
       return createResponse(false, 'CAMPO_OBRIGATORIO_AUSENTE', 'É necessário informar agenda_id.', 422, { campo: 'agenda_id' });
@@ -166,24 +166,50 @@ Deno.serve(async (req) => {
     const duracao = calcularDuracaoProcedimento(procedimento_nome);
     const data_hora_fim = adicionarMinutos(data_hora_inicio, duracao);
     const parts = (procedimento_nome || '').split(/[,;+]|\s+e\s+/gi).map((p: string) => p.trim()).filter(Boolean);
-    const updatedObs = atualizarObservacoesComHorario(observacoes, data_hora_inicio, data_hora_fim, parts.length);
 
-    const { data: newApp, error: insertError } = await supabase
+    let updatedObs = observacoes || '';
+    let valorNum: number | null = null;
+    if (valor !== undefined && valor !== null && valor !== '') {
+      const parsed = typeof valor === 'number' ? valor : parseFloat(String(valor).replace(/\./g, '').replace(',', '.'));
+      if (!isNaN(parsed) && parsed >= 0) valorNum = parsed;
+    }
+    if (valorNum !== null) {
+      const valorFormatted = valorNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      updatedObs = updatedObs.replace(/\[Valor:\s*R\$\s*[\d.,]+\]\s*/gi, '').trim();
+      updatedObs = updatedObs ? `${updatedObs}\n[Valor: R$ ${valorFormatted}]` : `[Valor: R$ ${valorFormatted}]`;
+    }
+    updatedObs = atualizarObservacoesComHorario(updatedObs, data_hora_inicio, data_hora_fim, parts.length);
+
+    const insertPayload: Record<string, any> = {
+      agenda_id,
+      lead_id,
+      cliente_id,
+      data_hora_inicio,
+      data_hora_fim,
+      procedimento_nome,
+      nome_lead: dbNomeLead,
+      whatsapp_lead: dbWhatsappLead,
+      observacoes: updatedObs,
+      status: 'agendado',
+    };
+    if (valorNum !== null) insertPayload.valor = valorNum;
+
+    let { data: newApp, error: insertError } = await supabase
       .from('agendamentos_estetica')
-      .insert({
-        agenda_id,
-        lead_id,
-        cliente_id,
-        data_hora_inicio,
-        data_hora_fim,
-        procedimento_nome,
-        nome_lead: dbNomeLead,
-        whatsapp_lead: dbWhatsappLead,
-        observacoes: updatedObs,
-        status: 'agendado',
-      })
+      .insert(insertPayload)
       .select()
       .single();
+
+    if (insertError && insertError.code === 'PGRST204' && insertPayload.valor !== undefined) {
+      delete insertPayload.valor;
+      const retry = await supabase
+        .from('agendamentos_estetica')
+        .insert(insertPayload)
+        .select()
+        .single();
+      newApp = retry.data;
+      insertError = retry.error;
+    }
 
     if (insertError) throw insertError;
 
