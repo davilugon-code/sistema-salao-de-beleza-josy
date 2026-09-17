@@ -229,26 +229,27 @@ export function Agenda() {
     return null;
   };
 
+  useEffect(() => {
+    Object.values(calendarRefs.current).forEach((ref) => {
+      if (ref) {
+        const api = ref.getApi();
+        if (api.view.type !== calendarView) {
+          api.changeView(calendarView);
+        }
+        api.gotoDate(currentDate);
+      }
+    });
+  }, [currentDate, calendarView, agendas]);
+
   const navigateDate = (dir: 1 | -1) => {
     const next = calendarView === 'timeGridDay'
       ? (dir === 1 ? addDays(currentDate, 1) : subDays(currentDate, 1))
       : (dir === 1 ? addWeeks(currentDate, 1) : subWeeks(currentDate, 1));
     setCurrentDate(next);
-    Object.values(calendarRefs.current).forEach((ref) => {
-      if (ref) {
-        const api = ref.getApi();
-        dir === 1 ? api.next() : api.prev();
-      }
-    });
   };
 
   const handleViewChange = (view: 'timeGridDay' | 'timeGridWeek') => {
     setCalendarView(view);
-    Object.values(calendarRefs.current).forEach((ref) => {
-      if (ref) {
-        ref.getApi().changeView(view);
-      }
-    });
   };
 
   const dateLabel = calendarView === 'timeGridDay'
@@ -792,11 +793,25 @@ export function Agenda() {
             </div>
           <div className="p-0 overflow-auto">
             <FullCalendar
-              ref={(ref) => { calendarRefs.current[agenda.id] = ref; }}
+              ref={(ref) => {
+                calendarRefs.current[agenda.id] = ref;
+                if (ref) {
+                  const api = ref.getApi();
+                  if (api.view.type !== calendarView) {
+                    api.changeView(calendarView);
+                  }
+                  api.gotoDate(currentDate);
+                }
+              }}
               plugins={[timeGridPlugin, interactionPlugin]}
               initialView={calendarView}
+              initialDate={currentDate}
               locale={ptBrLocale}
               headerToolbar={false}
+              dayHeaderFormat={calendarView === 'timeGridDay'
+                ? { weekday: 'long', day: '2-digit', month: '2-digit' }
+                : { weekday: 'short', day: '2-digit', month: '2-digit' }
+              }
               timeZone="local"
               slotMinTime="08:30:00"
               slotMaxTime="18:00:00"
